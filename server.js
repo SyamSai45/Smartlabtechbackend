@@ -1,28 +1,49 @@
-import dns from 'node:dns/promises';
-dns.setServers(['1.1.1.1', '8.8.8.8']);
 import express from 'express';
+import dns from 'dns';
+dns.setServers(['1.1.1.1', '8.8.8.8']);
 
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import connectDB from './config/database.js';
 import brandRoutes from './routes/brand.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import productRoutes from './routes/product.routes.js';
 import errorHandler from './middleware/error.middleware.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dns.setDefaultResultOrder("ipv4first");
 
-
 dotenv.config();
+
+// Create upload directories on server start
+const createUploadDirs = () => {
+  const dirs = [
+    path.join(__dirname, 'uploads'),
+    path.join(__dirname, 'uploads', 'brands'),
+    path.join(__dirname, 'uploads', 'products'),
+    path.join(__dirname, 'uploads', 'products', 'main'),
+    path.join(__dirname, 'uploads', 'products', 'gallery'),
+    path.join(__dirname, 'uploads', 'temp')
+  ];
+  
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`📁 Created directory: ${dir}`);
+    }
+  });
+};
+
+// Call before starting server
+createUploadDirs();
 
 // Connect to database
 connectDB();
-
 
 const app = express();
 
@@ -30,7 +51,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+console.log(`📁 Static files served from: ${path.join(__dirname, 'uploads')}`);
 
 // Routes
 app.use('/api/brands', brandRoutes);
@@ -49,6 +73,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📁 Uploads directory: ${path.join(__dirname, 'uploads')}`);
-  console.log('✅ DNS servers set to: 1.1.1.1, 8.8.8.8');
-
+  console.log(`🌐 Static files URL: http://localhost:${PORT}/uploads/`);
 });

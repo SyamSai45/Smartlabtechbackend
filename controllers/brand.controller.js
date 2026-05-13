@@ -2,7 +2,7 @@ import Brand from '../models/Brand.js';
 import fs from 'fs';
 import { processBrandLogo } from '../config/sharp.config.js';
 
-// @desc    Create brand
+// @desc    Create brand with logo upload
 // @route   POST /api/brands
 export const createBrand = async (req, res) => {
   try {
@@ -17,28 +17,38 @@ export const createBrand = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Brand already exists' });
     }
 
+    let logoUrl = null;
+    
     // Process logo if uploaded
-    let logoPath = null;
     if (req.file) {
-      logoPath = await processBrandLogo(req.file.path);
+      const originalPath = req.file.path;
+      logoUrl = await processBrandLogo(originalPath); // FIXED: Assign to logoUrl
+      // logoUrl will be like "/uploads/brands/logo-xxx.png"
     }
 
     const brand = await Brand.create({
       name,
-      logo: logoPath,
+      logo: logoUrl, // FIXED: Use logoUrl instead of req.body.logo
       description,
       website
     });
 
-    res.status(201).json({ success: true, message: 'Brand created successfully', data: brand });
+    // Return full URL
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const brandWithUrl = {
+      ...brand.toObject(),
+      logoUrl: brand.logo ? `${baseUrl}${brand.logo}` : null
+    };
+
+    res.status(201).json({ success: true, message: 'Brand created successfully', data: brandWithUrl });
   } catch (error) {
-    // Clean up uploaded file if error
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // @desc    Get all brands
 // @route   GET /api/brands

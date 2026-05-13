@@ -5,7 +5,7 @@ import fs from 'fs';
 import {
   processMainImage,
   processGalleryImage,
-  processThumbnail
+  createThumbnail
 } from '../config/sharp.config.js';
 
 // Helper function to delete product images
@@ -43,51 +43,61 @@ const parseJSONFields = (body) => {
   return body;
 };
 
-// @desc    Create product (No SKU, uses dropdown IDs for brand and category)
+// @desc    Create product with image upload
 // @route   POST /api/products
 export const createProduct = async (req, res) => {
   try {
+    console.log('📦 Creating product...');
+    
     // Parse JSON fields
     req.body = parseJSONFields(req.body);
     
     const { name, brand, category } = req.body;
 
-    // Check if product with same name exists
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Product name is required' });
+    }
+    if (!brand) {
+      return res.status(400).json({ success: false, message: 'Brand ID is required' });
+    }
+    if (!category) {
+      return res.status(400).json({ success: false, message: 'Category ID is required' });
+    }
+
+    // Check if product exists
     const existingProduct = await Product.findOne({ name });
     if (existingProduct) {
-      // Clean up uploaded files if error
-      if (req.files) {
-        if (req.files.mainImage && req.files.mainImage[0] && fs.existsSync(req.files.mainImage[0].path)) {
-          fs.unlinkSync(req.files.mainImage[0].path);
-        }
-        if (req.files.gallery) {
-          for (const file of req.files.gallery) {
-            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-          }
-        }
-      }
       return res.status(400).json({ success: false, message: 'Product with this name already exists' });
     }
 
-    // Verify brand exists (ID comes from dropdown)
+    // Verify brand exists
     const brandExists = await Brand.findById(brand);
     if (!brandExists) {
       return res.status(400).json({ success: false, message: 'Brand not found' });
     }
 
-    // Verify category exists (ID comes from dropdown)
+    // Verify category exists
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
       return res.status(400).json({ success: false, message: 'Category not found' });
     }
 
-    // Process images
+    // Process images - store URL paths
     if (req.files) {
       // Process main image
       if (req.files.mainImage && req.files.mainImage[0]) {
-        const mainImagePath = req.files.mainImage[0].path;
-        req.body.mainImage = await processMainImage(mainImagePath);
-        req.body.mainImageThumb = await processThumbnail(mainImagePath);
+        const originalPath = req.files.mainImage[0].path;
+        console.log(`📸 Original main image: ${originalPath}`);
+        
+        // Create optimized version and get URL path
+        const optimizedPath = await processMainImage(originalPath);
+        req.body.mainImage = optimizedPath; // Stores "/uploads/products/main/main-xxx.jpg"
+        
+        // Create thumbnail and get URL path
+        req.body.mainImageThumb = await createThumbnail(originalPath);
+        
+        console.log(`✅ Main image URL: ${req.body.mainImage}`);
       }
 
       // Process gallery images
@@ -96,10 +106,15 @@ export const createProduct = async (req, res) => {
         const galleryThumbPaths = [];
         
         for (const file of req.files.gallery) {
-          const processedPath = await processGalleryImage(file.path);
-          galleryPaths.push(processedPath);
+          const originalPath = file.path;
+          console.log(`📸 Original gallery image: ${originalPath}`);
           
-          const thumbPath = await processThumbnail(file.path);
+          // Create optimized version and get URL path
+          const optimizedPath = await processGalleryImage(originalPath);
+          galleryPaths.push(optimizedPath);
+          
+          // Create thumbnail and get URL path
+          const thumbPath = await createThumbnail(originalPath);
           galleryThumbPaths.push(thumbPath);
         }
         
@@ -117,19 +132,22 @@ export const createProduct = async (req, res) => {
 
     await product.populate('brand category');
 
-    res.status(201).json({ success: true, message: 'Product created successfully', data: product });
+    // Build full URLs for response
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productWithUrls = {
+      ...product.toObject(),
+      mainImageUrl: product.mainImage ? `${baseUrl}${product.mainImage}` : null,
+      mainImageThumbUrl: product.mainImageThumb ? `${baseUrl}${product.mainImageThumb}` : null,
+      galleryUrls: product.gallery ? product.gallery.map(img => `${baseUrl}${img}`) : []
+    };
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Product created successfully', 
+      data: productWithUrls 
+    });
   } catch (error) {
-    // Clean up uploaded files if error
-    if (req.files) {
-      if (req.files.mainImage && req.files.mainImage[0] && fs.existsSync(req.files.mainImage[0].path)) {
-        fs.unlinkSync(req.files.mainImage[0].path);
-      }
-      if (req.files.gallery) {
-        for (const file of req.files.gallery) {
-          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-        }
-      }
-    }
+    console.error('❌ Create product error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -174,7 +192,7 @@ export const getAllProducts = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const products = await Product.find(query)
-      .populate('brand', 'name logo')
+      .populate('brand', 'name logo description website')
       .populate('category', 'name')
       .sort(sort)
       .limit(parseInt(limit))
@@ -236,7 +254,7 @@ export const updateProduct = async (req, res) => {
       if (req.files.mainImage && req.files.mainImage[0]) {
         const mainImagePath = req.files.mainImage[0].path;
         req.body.mainImage = await processMainImage(mainImagePath);
-        req.body.mainImageThumb = await processThumbnail(mainImagePath);
+        req.body.mainImageThumb = await createThumbnail(mainImagePath);
       }
 
       // Process new gallery images
@@ -248,7 +266,7 @@ export const updateProduct = async (req, res) => {
           const processedPath = await processGalleryImage(file.path);
           galleryPaths.push(processedPath);
           
-          const thumbPath = await processThumbnail(file.path);
+          const thumbPath = await createThumbnail(file.path);
           galleryThumbPaths.push(thumbPath);
         }
         
