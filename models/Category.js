@@ -12,23 +12,10 @@ const categorySchema = new mongoose.Schema({
     unique: true,
     lowercase: true
   },
-  description: {
-    type: String,
-    default: ''
-  },
-  image: {
-    type: String,
-    default: null
-  },
-  parentCategory: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category',
-    default: null
-  },
   isActive: {
     type: Boolean,
-    default: true
-  }
+    default: true   
+  },
 }, { timestamps: true });
 
 // Create slug before saving

@@ -6,21 +6,23 @@ import {
   getCategoryBySlug,
   updateCategory,
   deleteCategory,
-  getCategoryOptions
+  getCategoryOptions,
+  toggleCategoryStatus
 } from '../controllers/category.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Public routes
+// Public routes (no authentication required)
 router.get('/', getAllCategories);
 router.get('/options', getCategoryOptions);
 router.get('/slug/:slug', getCategoryBySlug);
 router.get('/:id', getCategoryById);
 
-// Admin only routes
+// Admin only routes (require authentication and admin role)
 router.post('/', protect, authorize('admin'), createCategory);
 router.put('/:id', protect, authorize('admin'), updateCategory);
+router.patch('/:id/toggle', protect, authorize('admin'), toggleCategoryStatus);
 router.delete('/:id', protect, authorize('admin'), deleteCategory);
 
 export default router;

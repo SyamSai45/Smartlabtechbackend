@@ -4,18 +4,33 @@ import Category from '../models/Category.js';
 // @route   POST /api/categories
 export const createCategory = async (req, res) => {
   try {
-    const { name, description, image, parentCategory } = req.body;
+    const { name, isActive } = req.body;
 
+    // Check if category exists
     const existingCategory = await Category.findOne({ name });
     if (existingCategory) {
-      return res.status(400).json({ success: false, message: 'Category already exists' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Category already exists' 
+      });
     }
 
-    const category = await Category.create({ name, description, image, parentCategory });
+    // Create category
+    const category = await Category.create({ 
+      name, 
+      isActive: isActive !== undefined ? isActive : true 
+    });
 
-    res.status(201).json({ success: true, message: 'Category created successfully', data: category });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Category created successfully', 
+      data: category 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
@@ -24,13 +39,26 @@ export const createCategory = async (req, res) => {
 export const getAllCategories = async (req, res) => {
   try {
     const { isActive } = req.query;
+    
+    // Build query
     const query = {};
-    if (isActive) query.isActive = isActive === 'true';
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true';
+    }
 
-    const categories = await Category.find(query).populate('parentCategory', 'name');
-    res.json({ success: true, data: categories });
+    const categories = await Category.find(query)
+      .sort({ createdAt: -1 });
+
+    res.json({ 
+      success: true, 
+      count: categories.length,
+      data: categories 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
@@ -38,13 +66,24 @@ export const getAllCategories = async (req, res) => {
 // @route   GET /api/categories/:id
 export const getCategoryById = async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id).populate('parentCategory', 'name');
+    const category = await Category.findById(req.params.id);
+    
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Category not found' 
+      });
     }
-    res.json({ success: true, data: category });
+    
+    res.json({ 
+      success: true, 
+      data: category 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
@@ -52,13 +91,24 @@ export const getCategoryById = async (req, res) => {
 // @route   GET /api/categories/slug/:slug
 export const getCategoryBySlug = async (req, res) => {
   try {
-    const category = await Category.findOne({ slug: req.params.slug }).populate('parentCategory', 'name');
+    const category = await Category.findOne({ slug: req.params.slug });
+    
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Category not found' 
+      });
     }
-    res.json({ success: true, data: category });
+    
+    res.json({ 
+      success: true, 
+      data: category 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
@@ -66,17 +116,36 @@ export const getCategoryBySlug = async (req, res) => {
 // @route   PUT /api/categories/:id
 export const updateCategory = async (req, res) => {
   try {
+    const { name, isActive } = req.body;
+    
+    // Build update object
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    
     const category = await Category.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
+    
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Category not found' 
+      });
     }
-    res.json({ success: true, message: 'Category updated successfully', data: category });
+    
+    res.json({ 
+      success: true, 
+      message: 'Category updated successfully', 
+      data: category 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
@@ -84,24 +153,72 @@ export const updateCategory = async (req, res) => {
 // @route   DELETE /api/categories/:id
 export const deleteCategory = async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findByIdAndDelete(req.params.id);
+    
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Category not found' 
+      });
     }
-    await category.deleteOne();
-    res.json({ success: true, message: 'Category deleted successfully' });
+    
+    res.json({ 
+      success: true, 
+      message: 'Category deleted successfully' 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
-// @desc    Get category options for dropdown
+// @desc    Get category options for dropdown (only active categories)
 // @route   GET /api/categories/options
 export const getCategoryOptions = async (req, res) => {
   try {
-    const categories = await Category.find({ isActive: true }).select('name');
-    res.json({ success: true, data: categories });
+    const categories = await Category.find({ isActive: true })
+      .select('name slug')
+      .sort({ name: 1 });
+    
+    res.json({ 
+      success: true, 
+      data: categories 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
+
+// @desc    Toggle category active status
+// @route   PATCH /api/categories/:id/toggle
+export const toggleCategoryStatus = async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    
+    if (!category) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Category not found' 
+      });
+    }
+    
+    category.isActive = !category.isActive;
+    await category.save();
+    
+    res.json({ 
+      success: true, 
+      message: `Category ${category.isActive ? 'activated' : 'deactivated'} successfully`,
+      data: category 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
