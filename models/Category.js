@@ -7,24 +7,11 @@ const categorySchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
-  slug: {
-    type: String,
-    unique: true,
-    lowercase: true
-  },
   isActive: {
     type: Boolean,
-    default: true   
-  },
-}, { timestamps: true });
-
-// Create slug before saving
-categorySchema.pre('save', function(next) {
-  if (this.name && !this.slug) {
-    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    default: true
   }
-  next();
-});
+}, { timestamps: true });
 
 const Category = mongoose.model('Category', categorySchema);
 export default Category;

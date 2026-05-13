@@ -3,7 +3,6 @@ import {
   createBrand,
   getAllBrands,
   getBrandById,
-  getBrandBySlug,
   updateBrand,
   deleteBrand,
   getBrandOptions
@@ -13,15 +12,14 @@ import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Public routes
+// Public routes (no authentication required)
 router.get('/', getAllBrands);
-router.get('/options', getBrandOptions);
-router.get('/slug/:slug', getBrandBySlug);
+router.get('/options', getBrandOptions);  // For product dropdown
 router.get('/:id', getBrandById);
 
 // Admin only routes
-router.post('/', protect, authorize('admin'), uploadBrandLogo, createBrand);
-router.put('/:id', protect, authorize('admin'), uploadBrandLogo, updateBrand);
-router.delete('/:id', protect, authorize('admin'), deleteBrand);
+router.post('/',  uploadBrandLogo, createBrand);
+router.put('/:id', uploadBrandLogo, updateBrand);
+router.delete('/:id', deleteBrand);
 
 export default router;

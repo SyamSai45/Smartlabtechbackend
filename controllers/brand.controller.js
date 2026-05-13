@@ -6,7 +6,7 @@ import { processBrandLogo } from '../config/sharp.config.js';
 // @route   POST /api/brands
 export const createBrand = async (req, res) => {
   try {
-    const { name, description, website, founded, headquarters } = req.body;
+    const { name, description, website } = req.body;
 
     // Check if brand exists
     const existingBrand = await Brand.findOne({ name });
@@ -27,9 +27,7 @@ export const createBrand = async (req, res) => {
       name,
       logo: logoPath,
       description,
-      website,
-      founded,
-      headquarters
+      website
     });
 
     res.status(201).json({ success: true, message: 'Brand created successfully', data: brand });
@@ -76,20 +74,6 @@ export const getAllBrands = async (req, res) => {
 export const getBrandById = async (req, res) => {
   try {
     const brand = await Brand.findById(req.params.id);
-    if (!brand) {
-      return res.status(404).json({ success: false, message: 'Brand not found' });
-    }
-    res.json({ success: true, data: brand });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get brand by slug
-// @route   GET /api/brands/slug/:slug
-export const getBrandBySlug = async (req, res) => {
-  try {
-    const brand = await Brand.findOne({ slug: req.params.slug });
     if (!brand) {
       return res.status(404).json({ success: false, message: 'Brand not found' });
     }
@@ -150,13 +134,22 @@ export const deleteBrand = async (req, res) => {
   }
 };
 
-// @desc    Get brand options for dropdown
+// @desc    Get brand options for dropdown (used when creating products)
 // @route   GET /api/brands/options
 export const getBrandOptions = async (req, res) => {
   try {
-    const brands = await Brand.find({ isActive: true }).select('name logo');
-    res.json({ success: true, data: brands });
+    const brands = await Brand.find({ isActive: true })
+      .select('_id name logo')
+      .sort({ name: 1 });
+    
+    res.json({ 
+      success: true, 
+      data: brands 
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };

@@ -43,28 +43,39 @@ const parseJSONFields = (body) => {
   return body;
 };
 
-// @desc    Create product
+// @desc    Create product (No SKU, uses dropdown IDs for brand and category)
 // @route   POST /api/products
 export const createProduct = async (req, res) => {
   try {
     // Parse JSON fields
     req.body = parseJSONFields(req.body);
     
-    const { sku, name, brand, category } = req.body;
+    const { name, brand, category } = req.body;
 
-    // Check if SKU exists
-    const existingProduct = await Product.findOne({ sku });
+    // Check if product with same name exists
+    const existingProduct = await Product.findOne({ name });
     if (existingProduct) {
-      return res.status(400).json({ success: false, message: 'Product with this SKU already exists' });
+      // Clean up uploaded files if error
+      if (req.files) {
+        if (req.files.mainImage && req.files.mainImage[0] && fs.existsSync(req.files.mainImage[0].path)) {
+          fs.unlinkSync(req.files.mainImage[0].path);
+        }
+        if (req.files.gallery) {
+          for (const file of req.files.gallery) {
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+          }
+        }
+      }
+      return res.status(400).json({ success: false, message: 'Product with this name already exists' });
     }
 
-    // Verify brand exists
+    // Verify brand exists (ID comes from dropdown)
     const brandExists = await Brand.findById(brand);
     if (!brandExists) {
       return res.status(400).json({ success: false, message: 'Brand not found' });
     }
 
-    // Verify category exists
+    // Verify category exists (ID comes from dropdown)
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
       return res.status(400).json({ success: false, message: 'Category not found' });
@@ -164,7 +175,7 @@ export const getAllProducts = async (req, res) => {
 
     const products = await Product.find(query)
       .populate('brand', 'name logo')
-      .populate('category', 'name slug')
+      .populate('category', 'name')
       .sort(sort)
       .limit(parseInt(limit))
       .skip(skip);
@@ -192,25 +203,7 @@ export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
       .populate('brand', 'name logo description website')
-      .populate('category', 'name slug');
-
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-
-    res.json({ success: true, data: product });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get product by slug
-// @route   GET /api/products/slug/:slug
-export const getProductBySlug = async (req, res) => {
-  try {
-    const product = await Product.findOne({ slug: req.params.slug })
-      .populate('brand', 'name logo description website')
-      .populate('category', 'name slug');
+      .populate('category', 'name');
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
@@ -281,7 +274,7 @@ export const updateProduct = async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     ).populate('brand', 'name logo')
-     .populate('category', 'name slug');
+     .populate('category', 'name');
 
     res.json({ success: true, message: 'Product updated successfully', data: updatedProduct });
   } catch (error) {
@@ -352,7 +345,7 @@ export const getProductsByCategory = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const products = await Product.find({ category: req.params.categoryId, isActive: true })
-      .populate('category', 'name slug')
+      .populate('category', 'name')
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
 

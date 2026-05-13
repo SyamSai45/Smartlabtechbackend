@@ -12,23 +12,12 @@ const faqSchema = new mongoose.Schema({
 }, { _id: true });
 
 const productSchema = new mongoose.Schema({
-  // Basic Information
-  sku: {
-    type: String,
-    required: [true, 'SKU is required'],
-    unique: true,
-    trim: true
-  },
+  // Basic Information (SKU and slug removed)
   name: {
     type: String,
     required: [true, 'Product name is required'],
-    trim: true,
-    index: true
-  },
-  slug: {
-    type: String,
     unique: true,
-    lowercase: true,
+    trim: true,
     index: true
   },
   
@@ -157,16 +146,8 @@ const productSchema = new mongoose.Schema({
   metaKeywords: [String]
 }, { timestamps: true });
 
-// Create slug before saving
-productSchema.pre('save', function(next) {
-  if (this.name && !this.slug) {
-    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  }
-  next();
-});
-
 // Index for search
-productSchema.index({ name: 'text', shortDesc: 'text', fullDesc: 'text', sku: 'text' });
+productSchema.index({ name: 'text', shortDesc: 'text', fullDesc: 'text' });
 
 const Product = mongoose.model('Product', productSchema);
 export default Product;
