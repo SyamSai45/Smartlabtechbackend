@@ -12,7 +12,7 @@ import brandRoutes from './routes/brand.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import productRoutes from './routes/product.routes.js';
 import contactRoutes from './routes/contact.routes.js';
-import contactInfoRoutes from './routes/contactInfo.routes.js';
+import contactInfoRoutes from './routes/contactinfo.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
