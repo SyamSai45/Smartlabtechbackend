@@ -249,19 +249,35 @@ export const getProductById = async (req, res) => {
 
 // @desc    Get product by slug (URL-friendly name)
 // @route   GET /api/products/slug/:slug
+// @route   GET /api/products/:slug
 export const getProductBySlug = async (req, res) => {
   try {
-    const { slug } = req.params;
+    // Get slug from either route parameter
+    const slug = req.params.slug || req.params.id; // Fallback to :id if :slug is not defined
+    
+    console.log(`📍 Fetching product with slug: "${slug}"`);
+    
+    // Validate slug exists
+    if (!slug) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Slug parameter is required' 
+      });
+    }
+    
+    // Find product by slug (case-insensitive)
+    const product = await Product.findOne({ 
+      slug: { $regex: new RegExp(`^${slug}$`, 'i') } 
+    })
+    .populate('brand', 'name logo description website')
+    .populate('category', 'name');
 
-    // Find product by slug
-    const product = await Product.findOne({ slug: slug })
-      .populate('brand', 'name logo description website')
-      .populate('category', 'name');
+    console.log(`🔍 Product found: ${product ? product.name : 'No product found'}`);
 
     if (!product) {
       return res.status(404).json({ 
         success: false, 
-        message: 'Product not found' 
+        message: `Product not found with slug: "${slug}"` 
       });
     }
 
@@ -274,10 +290,10 @@ export const getProductBySlug = async (req, res) => {
       data: responseData 
     });
   } catch (error) {
+    console.error('Error in getProductBySlug:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // @desc    Get product by name (search by exact name or partial match)
 // @route   GET /api/products/name/:name
 export const getProductByName = async (req, res) => {
