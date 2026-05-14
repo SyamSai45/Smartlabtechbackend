@@ -4,8 +4,7 @@ import Category from '../models/Category.js';
 import fs from 'fs';
 import {
   processMainImage,
-  processGalleryImage,
-  createThumbnail
+  processGalleryImage
 } from '../config/sharp.config.js';
 
 // Helper function to delete product images
@@ -13,17 +12,9 @@ const deleteProductImages = async (product) => {
   if (product.mainImage && fs.existsSync(product.mainImage)) {
     fs.unlinkSync(product.mainImage);
   }
-  if (product.mainImageThumb && fs.existsSync(product.mainImageThumb)) {
-    fs.unlinkSync(product.mainImageThumb);
-  }
   if (product.gallery && product.gallery.length) {
     for (const image of product.gallery) {
       if (fs.existsSync(image)) fs.unlinkSync(image);
-    }
-  }
-  if (product.galleryThumbs && product.galleryThumbs.length) {
-    for (const thumb of product.galleryThumbs) {
-      if (fs.existsSync(thumb)) fs.unlinkSync(thumb);
     }
   }
 };
@@ -43,12 +34,46 @@ const parseJSONFields = (body) => {
   return body;
 };
 
+// Helper function to convert relative paths to full URLs and add slug
+const addFullUrls = (product, baseUrl) => {
+  const productObj = product.toObject();
+  
+  // Convert mainImage
+  if (productObj.mainImage && !productObj.mainImage.startsWith('http')) {
+    productObj.mainImage = `${baseUrl}${productObj.mainImage}`;
+  }
+  
+  // Convert gallery
+  if (productObj.gallery && productObj.gallery.length) {
+    productObj.gallery = productObj.gallery.map(img => 
+      img && !img.startsWith('http') ? `${baseUrl}${img}` : img
+    );
+  }
+  
+  // Convert brand logo if exists
+  if (productObj.brand && productObj.brand.logo && !productObj.brand.logo.startsWith('http')) {
+    productObj.brand.logo = `${baseUrl}${productObj.brand.logo}`;
+  }
+  
+  // Ensure slug is included
+  if (!productObj.slug && productObj.name) {
+    productObj.slug = productObj.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+  
+  // Remove duplicate URL fields if they exist
+  delete productObj.mainImageUrl;
+  delete productObj.galleryUrls;
+  
+  return productObj;
+};
+
 // @desc    Create product with image upload
 // @route   POST /api/products
 export const createProduct = async (req, res) => {
   try {
-    console.log('📦 Creating product...');
-    
     // Parse JSON fields
     req.body = parseJSONFields(req.body);
     
@@ -65,8 +90,14 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Category ID is required' });
     }
 
-    // Check if product exists
-    const existingProduct = await Product.findOne({ name });
+    // Generate slug from name
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    // Check if product exists by name or slug
+    const existingProduct = await Product.findOne({ $or: [{ name }, { slug }] });
     if (existingProduct) {
       return res.status(400).json({ success: false, message: 'Product with this name already exists' });
     }
@@ -83,68 +114,47 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Category not found' });
     }
 
-    // Process images - store URL paths
+    // Process images - store relative paths in DB
     if (req.files) {
       // Process main image
       if (req.files.mainImage && req.files.mainImage[0]) {
         const originalPath = req.files.mainImage[0].path;
-        console.log(`📸 Original main image: ${originalPath}`);
-        
-        // Create optimized version and get URL path
-        const optimizedPath = await processMainImage(originalPath);
-        req.body.mainImage = optimizedPath; // Stores "/uploads/products/main/main-xxx.jpg"
-        
-        // Create thumbnail and get URL path
-        req.body.mainImageThumb = await createThumbnail(originalPath);
-        
-        console.log(`✅ Main image URL: ${req.body.mainImage}`);
+        const relativePath = await processMainImage(originalPath);
+        req.body.mainImage = relativePath;
       }
 
       // Process gallery images
       if (req.files.gallery && req.files.gallery.length) {
         const galleryPaths = [];
-        const galleryThumbPaths = [];
         
         for (const file of req.files.gallery) {
           const originalPath = file.path;
-          console.log(`📸 Original gallery image: ${originalPath}`);
-          
-          // Create optimized version and get URL path
-          const optimizedPath = await processGalleryImage(originalPath);
-          galleryPaths.push(optimizedPath);
-          
-          // Create thumbnail and get URL path
-          const thumbPath = await createThumbnail(originalPath);
-          galleryThumbPaths.push(thumbPath);
+          const relativePath = await processGalleryImage(originalPath);
+          galleryPaths.push(relativePath);
         }
         
         req.body.gallery = galleryPaths;
-        req.body.galleryThumbs = galleryThumbPaths;
       }
     }
 
-    // Create product
+    // Create product with slug
     const product = await Product.create({
       ...req.body,
+      slug,
       brandName: brandExists.name,
       categoryName: categoryExists.name
     });
 
     await product.populate('brand category');
 
-    // Build full URLs for response
+    // Convert relative paths to full URLs for response
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productWithUrls = {
-      ...product.toObject(),
-      mainImageUrl: product.mainImage ? `${baseUrl}${product.mainImage}` : null,
-      mainImageThumbUrl: product.mainImageThumb ? `${baseUrl}${product.mainImageThumb}` : null,
-      galleryUrls: product.gallery ? product.gallery.map(img => `${baseUrl}${img}`) : []
-    };
+    const responseData = addFullUrls(product, baseUrl);
 
     res.status(201).json({ 
       success: true, 
       message: 'Product created successfully', 
-      data: productWithUrls 
+      data: responseData 
     });
   } catch (error) {
     console.error('❌ Create product error:', error.message);
@@ -172,12 +182,9 @@ export const getAllProducts = async (req, res) => {
 
     const query = {};
 
-    // Search
     if (search) {
       query.$text = { $search: search };
     }
-
-    // Filters
     if (brand) query.brand = brand;
     if (category) query.category = category;
     if (inStock === 'true') query.inStock = true;
@@ -200,9 +207,13 @@ export const getAllProducts = async (req, res) => {
 
     const total = await Product.countDocuments(query);
 
+    // Convert relative paths to full URLs
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
+
     res.json({
       success: true,
-      data: products,
+      data: productsWithUrls,
       pagination: {
         total,
         page: parseInt(page),
@@ -215,7 +226,7 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
-// @desc    Get product by ID
+// @desc    Get product by ID (includes slug)
 // @route   GET /api/products/:id
 export const getProductById = async (req, res) => {
   try {
@@ -227,7 +238,150 @@ export const getProductById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    res.json({ success: true, data: product });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const responseData = addFullUrls(product, baseUrl);
+
+    res.json({ success: true, data: responseData });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get product by slug (URL-friendly name)
+// @route   GET /api/products/slug/:slug
+export const getProductBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Find product by slug
+    const product = await Product.findOne({ slug: slug })
+      .populate('brand', 'name logo description website')
+      .populate('category', 'name');
+
+    if (!product) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Product not found' 
+      });
+    }
+
+    // Convert relative paths to full URLs
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const responseData = addFullUrls(product, baseUrl);
+
+    res.json({ 
+      success: true, 
+      data: responseData 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get product by name (search by exact name or partial match)
+// @route   GET /api/products/name/:name
+export const getProductByName = async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { exact = 'false' } = req.query;
+
+    let query = {};
+
+    if (exact === 'true') {
+      query = { name: name };
+    } else {
+      query = { name: { $regex: name, $options: 'i' } };
+    }
+
+    const products = await Product.find(query)
+      .populate('brand', 'name logo description website')
+      .populate('category', 'name')
+      .sort({ name: 1 });
+
+    if (products.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `No products found with name containing "${name}"` 
+      });
+    }
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
+
+    res.json({ 
+      success: true, 
+      count: productsWithUrls.length,
+      data: productsWithUrls 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get featured products (includes slug)
+// @route   GET /api/products/featured
+export const getFeaturedProducts = async (req, res) => {
+  try {
+    const { limit = 8 } = req.query;
+    const products = await Product.find({ isFeatured: true, isActive: true })
+      .populate('brand', 'name logo')
+      .limit(parseInt(limit))
+      .sort({ rating: -1 });
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
+
+    res.json({ success: true, data: productsWithUrls });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get products by brand (includes slug)
+// @route   GET /api/products/brand/:brandId
+export const getProductsByBrand = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const products = await Product.find({ brand: req.params.brandId, isActive: true })
+      .populate('brand', 'name logo')
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+
+    const total = await Product.countDocuments({ brand: req.params.brandId, isActive: true });
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
+
+    res.json({
+      success: true,
+      data: productsWithUrls,
+      pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get products by category (includes slug)
+// @route   GET /api/products/category/:categoryId
+export const getProductsByCategory = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const products = await Product.find({ category: req.params.categoryId, isActive: true })
+      .populate('category', 'name')
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+
+    const total = await Product.countDocuments({ category: req.params.categoryId, isActive: true });
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
+
+    res.json({
+      success: true,
+      data: productsWithUrls,
+      pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -242,46 +396,52 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    // Parse JSON fields
     req.body = parseJSONFields(req.body);
 
-    // Process new images
-    if (req.files) {
-      // Delete old images
-      await deleteProductImages(product);
-
-      // Process new main image
-      if (req.files.mainImage && req.files.mainImage[0]) {
-        const mainImagePath = req.files.mainImage[0].path;
-        req.body.mainImage = await processMainImage(mainImagePath);
-        req.body.mainImageThumb = await createThumbnail(mainImagePath);
-      }
-
-      // Process new gallery images
-      if (req.files.gallery && req.files.gallery.length) {
-        const galleryPaths = [];
-        const galleryThumbPaths = [];
-        
-        for (const file of req.files.gallery) {
-          const processedPath = await processGalleryImage(file.path);
-          galleryPaths.push(processedPath);
-          
-          const thumbPath = await createThumbnail(file.path);
-          galleryThumbPaths.push(thumbPath);
-        }
-        
-        req.body.gallery = galleryPaths;
-        req.body.galleryThumbs = galleryThumbPaths;
+    // Update slug if name changed
+    if (req.body.name && req.body.name !== product.name) {
+      req.body.slug = req.body.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      
+      // Check if new slug already exists
+      const existingProduct = await Product.findOne({ 
+        slug: req.body.slug, 
+        _id: { $ne: req.params.id } 
+      });
+      if (existingProduct) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Product with similar name already exists' 
+        });
       }
     }
 
-    // Update brand name if brand changed
+    if (req.files) {
+      await deleteProductImages(product);
+
+      if (req.files.mainImage && req.files.mainImage[0]) {
+        const mainImagePath = req.files.mainImage[0].path;
+        const relativePath = await processMainImage(mainImagePath);
+        req.body.mainImage = relativePath;
+      }
+
+      if (req.files.gallery && req.files.gallery.length) {
+        const galleryPaths = [];
+        for (const file of req.files.gallery) {
+          const relativePath = await processGalleryImage(file.path);
+          galleryPaths.push(relativePath);
+        }
+        req.body.gallery = galleryPaths;
+      }
+    }
+
     if (req.body.brand && req.body.brand !== product.brand.toString()) {
       const brand = await Brand.findById(req.body.brand);
       if (brand) req.body.brandName = brand.name;
     }
 
-    // Update category name if category changed
     if (req.body.category && req.body.category !== product.category.toString()) {
       const category = await Category.findById(req.body.category);
       if (category) req.body.categoryName = category.name;
@@ -294,7 +454,10 @@ export const updateProduct = async (req, res) => {
     ).populate('brand', 'name logo')
      .populate('category', 'name');
 
-    res.json({ success: true, message: 'Product updated successfully', data: updatedProduct });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const responseData = addFullUrls(updatedProduct, baseUrl);
+
+    res.json({ success: true, message: 'Product updated successfully', data: responseData });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -309,71 +472,9 @@ export const deleteProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    // Delete all product images
     await deleteProductImages(product);
-
     await product.deleteOne();
     res.json({ success: true, message: 'Product deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get featured products
-// @route   GET /api/products/featured
-export const getFeaturedProducts = async (req, res) => {
-  try {
-    const { limit = 8 } = req.query;
-    const products = await Product.find({ isFeatured: true, isActive: true })
-      .populate('brand', 'name logo')
-      .limit(parseInt(limit))
-      .sort({ rating: -1 });
-
-    res.json({ success: true, data: products });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get products by brand
-// @route   GET /api/products/brand/:brandId
-export const getProductsByBrand = async (req, res) => {
-  try {
-    const { page = 1, limit = 20 } = req.query;
-    const products = await Product.find({ brand: req.params.brandId, isActive: true })
-      .populate('brand', 'name logo')
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-
-    const total = await Product.countDocuments({ brand: req.params.brandId, isActive: true });
-
-    res.json({
-      success: true,
-      data: products,
-      pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get products by category
-// @route   GET /api/products/category/:categoryId
-export const getProductsByCategory = async (req, res) => {
-  try {
-    const { page = 1, limit = 20 } = req.query;
-    const products = await Product.find({ category: req.params.categoryId, isActive: true })
-      .populate('category', 'name')
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-
-    const total = await Product.countDocuments({ category: req.params.categoryId, isActive: true });
-
-    res.json({
-      success: true,
-      data: products,
-      pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) }
-    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -7,7 +7,9 @@ import {
   deleteProduct,
   getFeaturedProducts,
   getProductsByBrand,
-  getProductsByCategory
+  getProductsByCategory,
+  getProductBySlug,
+  getProductByName
 } from '../controllers/product.controller.js';
 import { uploadProductImages } from '../config/multer.config.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
@@ -19,6 +21,8 @@ router.get('/', getAllProducts);
 router.get('/featured', getFeaturedProducts);
 router.get('/brand/:brandId', getProductsByBrand);
 router.get('/category/:categoryId', getProductsByCategory);
+router.get('/name/:name', getProductByName);
+router.get('/:slug', getProductBySlug);
 router.get('/:id', getProductById);
 
 // Admin only routes

@@ -12,12 +12,18 @@ const faqSchema = new mongoose.Schema({
 }, { _id: true });
 
 const productSchema = new mongoose.Schema({
-  // Basic Information (SKU and slug removed)
+  // Basic Information
   name: {
     type: String,
     required: [true, 'Product name is required'],
     unique: true,
     trim: true,
+    index: true
+  },
+  slug: {
+    type: String,
+    unique: true,
+    lowercase: true,
     index: true
   },
   
@@ -56,13 +62,7 @@ const productSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Main image is required']
   },
-  mainImageThumb: {
-    type: String
-  },
   gallery: [{
-    type: String
-  }],
-  galleryThumbs: [{
     type: String
   }],
   
@@ -122,7 +122,7 @@ const productSchema = new mongoose.Schema({
   },
   reviews: {
     type: Number,
-    default: 0
+    default: 0  
   },
   
   // Certifications - array of strings
@@ -146,8 +146,20 @@ const productSchema = new mongoose.Schema({
   metaKeywords: [String]
 }, { timestamps: true });
 
+
+productSchema.pre('save', function(next) {
+  if (this.name && !this.slug) {
+    this.slug = this.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+  next();
+});
+
 // Index for search
 productSchema.index({ name: 'text', shortDesc: 'text', fullDesc: 'text' });
+
 
 const Product = mongoose.model('Product', productSchema);
 export default Product;

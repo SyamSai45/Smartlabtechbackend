@@ -22,25 +22,24 @@ export const createBrand = async (req, res) => {
     // Process logo if uploaded
     if (req.file) {
       const originalPath = req.file.path;
-      logoUrl = await processBrandLogo(originalPath); // FIXED: Assign to logoUrl
-      // logoUrl will be like "/uploads/brands/logo-xxx.png"
+      const relativePath = await processBrandLogo(originalPath);
+      // Convert relative path to full URL
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      logoUrl = relativePath ? `${baseUrl}${relativePath}` : null;
     }
 
     const brand = await Brand.create({
       name,
-      logo: logoUrl, // FIXED: Use logoUrl instead of req.body.logo
+      logo: logoUrl, // Store full URL directly
       description,
       website
     });
 
-    // Return full URL
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const brandWithUrl = {
-      ...brand.toObject(),
-      logoUrl: brand.logo ? `${baseUrl}${brand.logo}` : null
-    };
-
-    res.status(201).json({ success: true, message: 'Brand created successfully', data: brandWithUrl });
+    res.status(201).json({ 
+      success: true, 
+      message: 'Brand created successfully', 
+      data: brand.toObject() 
+    });
   } catch (error) {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
@@ -48,7 +47,6 @@ export const createBrand = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 // @desc    Get all brands
 // @route   GET /api/brands
@@ -58,12 +56,22 @@ export const getAllBrands = async (req, res) => {
     const query = {};
     if (isActive) query.isActive = isActive === 'true';
 
-    const brands = await Brand.find(query)
+    let brands = await Brand.find(query)
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .sort({ name: 1 });
 
     const total = await Brand.countDocuments(query);
+    
+    // Add full URLs to logo field
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    brands = brands.map(brand => {
+      const brandObj = brand.toObject();
+      if (brandObj.logo && !brandObj.logo.startsWith('http')) {
+        brandObj.logo = `${baseUrl}${brandObj.logo}`;
+      }
+      return brandObj;
+    });
 
     res.json({
       success: true,
@@ -87,7 +95,15 @@ export const getBrandById = async (req, res) => {
     if (!brand) {
       return res.status(404).json({ success: false, message: 'Brand not found' });
     }
-    res.json({ success: true, data: brand });
+    
+    // Add full URL to logo field
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const brandObj = brand.toObject();
+    if (brandObj.logo && !brandObj.logo.startsWith('http')) {
+      brandObj.logo = `${baseUrl}${brandObj.logo}`;
+    }
+    
+    res.json({ success: true, data: brandObj });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -108,7 +124,9 @@ export const updateBrand = async (req, res) => {
       if (brand.logo && fs.existsSync(brand.logo)) {
         fs.unlinkSync(brand.logo);
       }
-      req.body.logo = await processBrandLogo(req.file.path);
+      const relativePath = await processBrandLogo(req.file.path);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      req.body.logo = relativePath ? `${baseUrl}${relativePath}` : null;
     }
 
     const updatedBrand = await Brand.findByIdAndUpdate(
@@ -117,7 +135,14 @@ export const updateBrand = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    res.json({ success: true, message: 'Brand updated successfully', data: updatedBrand });
+    // Add full URL to logo field
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const brandObj = updatedBrand.toObject();
+    if (brandObj.logo && !brandObj.logo.startsWith('http')) {
+      brandObj.logo = `${baseUrl}${brandObj.logo}`;
+    }
+
+    res.json({ success: true, message: 'Brand updated successfully', data: brandObj });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -144,7 +169,7 @@ export const deleteBrand = async (req, res) => {
   }
 };
 
-// @desc    Get brand options for dropdown (used when creating products)
+// @desc    Get brand options for dropdown
 // @route   GET /api/brands/options
 export const getBrandOptions = async (req, res) => {
   try {
@@ -152,9 +177,19 @@ export const getBrandOptions = async (req, res) => {
       .select('_id name logo')
       .sort({ name: 1 });
     
+    // Add full URLs to logo field
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const brandsWithUrls = brands.map(brand => {
+      const brandObj = brand.toObject();
+      if (brandObj.logo && !brandObj.logo.startsWith('http')) {
+        brandObj.logo = `${baseUrl}${brandObj.logo}`;
+      }
+      return brandObj;
+    });
+    
     res.json({ 
       success: true, 
-      data: brands 
+      data: brandsWithUrls 
     });
   } catch (error) {
     res.status(500).json({ 
