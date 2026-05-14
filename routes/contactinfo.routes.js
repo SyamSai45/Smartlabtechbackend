@@ -4,7 +4,7 @@ import {
   createContactInfo,
   updateContactInfo,
   deleteContactInfo
-} from '../controllers/contactInfo.controller.js';
+} from '../controllers/contactinfo.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
