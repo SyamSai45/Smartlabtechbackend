@@ -161,4 +161,4 @@ const homePageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const HomePage = mongoose.model('HomePage', homePageSchema);
-export default HomePage;
+export default HomePage; 
