@@ -38,7 +38,7 @@ import {
   updateCta,
   getCta,
   deleteCta
-} from '../controllers/aboutPage.controller.js';
+} from '../controllers/aboutpage.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
