@@ -739,7 +739,7 @@ export const updateCta = async (req, res) => {
     if (req.body.title) aboutPage.cta.title = req.body.title;
     if (req.body.tag !== undefined) aboutPage.cta.tag = req.body.tag;
     if (req.body.description) aboutPage.cta.description = req.body.description;
-    if (req.body.isActive !== undefined) aboutPage.cta.isActive = req.body.isActive === 'true';
+    if (req.body.isActive !== undefined) aboutPage.cta.isActive = req.body.isActive;
     
     await aboutPage.save();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
