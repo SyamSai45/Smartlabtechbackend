@@ -131,11 +131,15 @@ export const deleteAboutPage = async (req, res) => {
 
 // ==================== HERO SECTION CRUD ====================
 
-// Create/Update Hero
-export const updateHero = async (req, res) => {
+// Create Hero
+export const createHero = async (req, res) => {
   try {
     let aboutPage = await AboutPage.findOne();
     if (!aboutPage) aboutPage = new AboutPage();
+    
+    if (aboutPage.hero) {
+      return res.status(400).json({ success: false, message: 'Hero already exists. Use updateHero to update.' });
+    }
     
     const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
     aboutPage.hero = {
@@ -147,6 +151,29 @@ export const updateHero = async (req, res) => {
     };
     await aboutPage.save();
     
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.status(201).json({ success: true, message: 'Hero created', data: addFullUrls(aboutPage.toObject(), baseUrl).hero });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Hero
+export const updateHero = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage || !aboutPage.hero) {
+      return res.status(404).json({ success: false, message: 'Hero not found. Use createHero first.' });
+    }
+    
+    const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
+    if (req.body.title) aboutPage.hero.title = req.body.title;
+    if (req.body.tag !== undefined) aboutPage.hero.tag = req.body.tag;
+    if (req.body.description) aboutPage.hero.description = req.body.description;
+    if (image) aboutPage.hero.image = image;
+    if (req.body.isActive !== undefined) aboutPage.hero.isActive = req.body.isActive === 'true';
+    
+    await aboutPage.save();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({ success: true, message: 'Hero updated', data: addFullUrls(aboutPage.toObject(), baseUrl).hero });
   } catch (error) {
@@ -181,11 +208,15 @@ export const deleteHero = async (req, res) => {
 
 // ==================== ABOUT SECTION CRUD ====================
 
-// Create/Update About
-export const updateAbout = async (req, res) => {
+// Create About
+export const createAbout = async (req, res) => {
   try {
     let aboutPage = await AboutPage.findOne();
     if (!aboutPage) aboutPage = new AboutPage();
+    
+    if (aboutPage.about) {
+      return res.status(400).json({ success: false, message: 'About section already exists. Use updateAbout to update.' });
+    }
     
     const bgImage = req.file ? await saveFile(req.file, 'about') : req.body.bgImage;
     aboutPage.about = {
@@ -197,6 +228,29 @@ export const updateAbout = async (req, res) => {
     };
     await aboutPage.save();
     
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.status(201).json({ success: true, message: 'About section created', data: addFullUrls(aboutPage.toObject(), baseUrl).about });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update About
+export const updateAbout = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage || !aboutPage.about) {
+      return res.status(404).json({ success: false, message: 'About section not found. Use createAbout first.' });
+    }
+    
+    const bgImage = req.file ? await saveFile(req.file, 'about') : req.body.bgImage;
+    if (req.body.title) aboutPage.about.title = req.body.title;
+    if (req.body.tag) aboutPage.about.tag = req.body.tag;
+    if (req.body.description) aboutPage.about.description = req.body.description;
+    if (bgImage) aboutPage.about.bgImage = bgImage;
+    if (req.body.isActive !== undefined) aboutPage.about.isActive = req.body.isActive === 'true';
+    
+    await aboutPage.save();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({ success: true, message: 'About section updated', data: addFullUrls(aboutPage.toObject(), baseUrl).about });
   } catch (error) {
@@ -342,11 +396,15 @@ export const deleteCard = async (req, res) => {
 
 // ==================== CORE VALUES SECTION CRUD ====================
 
-// Create/Update Core Values
-export const updateCoreValues = async (req, res) => {
+// Create Core Values Section
+export const createCoreValues = async (req, res) => {
   try {
     let aboutPage = await AboutPage.findOne();
     if (!aboutPage) aboutPage = new AboutPage();
+    
+    if (aboutPage.coreValues) {
+      return res.status(400).json({ success: false, message: 'Core values section already exists. Use updateCoreValues to update.' });
+    }
     
     aboutPage.coreValues = {
       title: req.body.title,
@@ -357,7 +415,28 @@ export const updateCoreValues = async (req, res) => {
     await aboutPage.save();
     
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.json({ success: true, message: 'Core values updated', data: addFullUrls(aboutPage.toObject(), baseUrl).coreValues });
+    res.status(201).json({ success: true, message: 'Core values section created', data: addFullUrls(aboutPage.toObject(), baseUrl).coreValues });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Core Values Section
+export const updateCoreValues = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage || !aboutPage.coreValues) {
+      return res.status(404).json({ success: false, message: 'Core values section not found. Use createCoreValues first.' });
+    }
+    
+    if (req.body.title) aboutPage.coreValues.title = req.body.title;
+    if (req.body.tag) aboutPage.coreValues.tag = req.body.tag;
+    if (req.body.values) aboutPage.coreValues.values = JSON.parse(req.body.values);
+    if (req.body.isActive !== undefined) aboutPage.coreValues.isActive = req.body.isActive === 'true';
+    
+    await aboutPage.save();
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({ success: true, message: 'Core values section updated', data: addFullUrls(aboutPage.toObject(), baseUrl).coreValues });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -375,12 +454,14 @@ export const getCoreValues = async (req, res) => {
   }
 };
 
-// Add Core Value
+// Add Core Value Item
 export const addCoreValue = async (req, res) => {
   try {
     const aboutPage = await AboutPage.findOne();
     if (!aboutPage) return res.status(404).json({ success: false, message: 'About page not found' });
-    if (!aboutPage.coreValues) aboutPage.coreValues = { title: '', tag: '', values: [] };
+    if (!aboutPage.coreValues) {
+      return res.status(404).json({ success: false, message: 'Core values section not found. Create it first.' });
+    }
     if (!aboutPage.coreValues.values) aboutPage.coreValues.values = [];
     
     aboutPage.coreValues.values.push({
@@ -421,7 +502,7 @@ export const getCoreValueById = async (req, res) => {
   }
 };
 
-// Update Core Value
+// Update Core Value Item
 export const updateCoreValue = async (req, res) => {
   try {
     const { index } = req.params;
@@ -447,7 +528,7 @@ export const updateCoreValue = async (req, res) => {
   }
 };
 
-// Delete Core Value
+// Delete Core Value Item
 export const deleteCoreValue = async (req, res) => {
   try {
     const { index } = req.params;
@@ -463,13 +544,30 @@ export const deleteCoreValue = async (req, res) => {
   }
 };
 
+// Delete Core Values Section
+export const deleteCoreValues = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage) return res.status(404).json({ success: false, message: 'About page not found' });
+    aboutPage.coreValues = undefined;
+    await aboutPage.save();
+    res.json({ success: true, message: 'Core values section deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==================== WHY CHOOSE US SECTION CRUD ====================
 
-// Create/Update Why Choose Us
-export const updateWhyChooseUs = async (req, res) => {
+// Create Why Choose Us Section
+export const createWhyChooseUs = async (req, res) => {
   try {
     let aboutPage = await AboutPage.findOne();
     if (!aboutPage) aboutPage = new AboutPage();
+    
+    if (aboutPage.whyChooseUs) {
+      return res.status(400).json({ success: false, message: 'Why choose us section already exists. Use updateWhyChooseUs to update.' });
+    }
     
     const image = req.file ? await saveFile(req.file, 'whychoose') : req.body.image;
     aboutPage.whyChooseUs = {
@@ -483,7 +581,31 @@ export const updateWhyChooseUs = async (req, res) => {
     await aboutPage.save();
     
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.json({ success: true, message: 'Why choose us updated', data: addFullUrls(aboutPage.toObject(), baseUrl).whyChooseUs });
+    res.status(201).json({ success: true, message: 'Why choose us section created', data: addFullUrls(aboutPage.toObject(), baseUrl).whyChooseUs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Why Choose Us Section
+export const updateWhyChooseUs = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage || !aboutPage.whyChooseUs) {
+      return res.status(404).json({ success: false, message: 'Why choose us section not found. Use createWhyChooseUs first.' });
+    }
+    
+    const image = req.file ? await saveFile(req.file, 'whychoose') : req.body.image;
+    if (req.body.title) aboutPage.whyChooseUs.title = req.body.title;
+    if (req.body.tag) aboutPage.whyChooseUs.tag = req.body.tag;
+    if (req.body.description) aboutPage.whyChooseUs.description = req.body.description;
+    if (image) aboutPage.whyChooseUs.image = image;
+    if (req.body.points) aboutPage.whyChooseUs.points = JSON.parse(req.body.points);
+    if (req.body.isActive !== undefined) aboutPage.whyChooseUs.isActive = req.body.isActive === 'true';
+    
+    await aboutPage.save();
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({ success: true, message: 'Why choose us section updated', data: addFullUrls(aboutPage.toObject(), baseUrl).whyChooseUs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -505,7 +627,9 @@ export const getWhyChooseUs = async (req, res) => {
 export const addWhyChoosePoint = async (req, res) => {
   try {
     const aboutPage = await AboutPage.findOne();
-    if (!aboutPage || !aboutPage.whyChooseUs) return res.status(404).json({ success: false, message: 'Why choose us section not found' });
+    if (!aboutPage || !aboutPage.whyChooseUs) {
+      return res.status(404).json({ success: false, message: 'Why choose us section not found. Create it first.' });
+    }
     
     aboutPage.whyChooseUs.points.push({ point: req.body.point, isActive: true });
     await aboutPage.save();
@@ -564,13 +688,30 @@ export const deleteWhyChoosePoint = async (req, res) => {
   }
 };
 
+// Delete Why Choose Us Section
+export const deleteWhyChooseUs = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage) return res.status(404).json({ success: false, message: 'About page not found' });
+    aboutPage.whyChooseUs = undefined;
+    await aboutPage.save();
+    res.json({ success: true, message: 'Why choose us section deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==================== CTA SECTION CRUD ====================
 
-// Create/Update CTA
-export const updateCta = async (req, res) => {
+// Create CTA
+export const createCta = async (req, res) => {
   try {
     let aboutPage = await AboutPage.findOne();
     if (!aboutPage) aboutPage = new AboutPage();
+    
+    if (aboutPage.cta) {
+      return res.status(400).json({ success: false, message: 'CTA already exists. Use updateCta to update.' });
+    }
     
     aboutPage.cta = {
       title: req.body.title,
@@ -580,6 +721,27 @@ export const updateCta = async (req, res) => {
     };
     await aboutPage.save();
     
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.status(201).json({ success: true, message: 'CTA created', data: addFullUrls(aboutPage.toObject(), baseUrl).cta });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update CTA
+export const updateCta = async (req, res) => {
+  try {
+    const aboutPage = await AboutPage.findOne();
+    if (!aboutPage || !aboutPage.cta) {
+      return res.status(404).json({ success: false, message: 'CTA not found. Use createCta first.' });
+    }
+    
+    if (req.body.title) aboutPage.cta.title = req.body.title;
+    if (req.body.tag !== undefined) aboutPage.cta.tag = req.body.tag;
+    if (req.body.description) aboutPage.cta.description = req.body.description;
+    if (req.body.isActive !== undefined) aboutPage.cta.isActive = req.body.isActive === 'true';
+    
+    await aboutPage.save();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({ success: true, message: 'CTA updated', data: addFullUrls(aboutPage.toObject(), baseUrl).cta });
   } catch (error) {
