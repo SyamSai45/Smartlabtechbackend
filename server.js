@@ -17,6 +17,7 @@ import homePageRoutes from './routes/homepage.routes.js';
 import aboutPageRoutes from './routes/aboutpage.routes.js';
 import servicePageRoutes from './routes/servicepage.routes.js';
 import supportPageRoutes from './routes/supportpage.routes.js';
+import quoteRoutes from './routes/quote.routes.js';``
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,18 +30,52 @@ dotenv.config();
 // Create upload directories on server start
 const createUploadDirs = () => {
   const dirs = [
+    // Root uploads
     path.join(__dirname, 'uploads'),
+    path.join(__dirname, 'uploads', 'temp'),
+    
+    // Brand directories
     path.join(__dirname, 'uploads', 'brands'),
+    
+    // Product directories
     path.join(__dirname, 'uploads', 'products'),
     path.join(__dirname, 'uploads', 'products', 'main'),
     path.join(__dirname, 'uploads', 'products', 'gallery'),
-    path.join(__dirname, 'uploads', 'temp')
+    
+    // Homepage directories
+    path.join(__dirname, 'uploads', 'homepage'),
+    path.join(__dirname, 'uploads', 'homepage', 'hero'),
+    path.join(__dirname, 'uploads', 'homepage', 'about'),
+    path.join(__dirname, 'uploads', 'homepage', 'achievements'),
+    path.join(__dirname, 'uploads', 'homepage', 'testimonials'),
+    
+    // About page directories
+    path.join(__dirname, 'uploads', 'aboutpage'),
+    path.join(__dirname, 'uploads', 'aboutpage', 'hero'),
+    path.join(__dirname, 'uploads', 'aboutpage', 'about'),
+    path.join(__dirname, 'uploads', 'aboutpage', 'cards'),
+    path.join(__dirname, 'uploads', 'aboutpage', 'whychoose'),
+    
+    // Services page directories
+    path.join(__dirname, 'uploads', 'servicespage'),
+    path.join(__dirname, 'uploads', 'servicespage', 'servicehome'),
+    path.join(__dirname, 'uploads', 'servicespage', 'servicehero'),
+    path.join(__dirname, 'uploads', 'servicespage', 'servicecatalogue'),
+    path.join(__dirname, 'uploads', 'servicespage', 'servicesupport'),
+    
+    // Support page directories
+    path.join(__dirname, 'uploads', 'supportpage'),
+    path.join(__dirname, 'uploads', 'supportpage', 'hero'),
+    path.join(__dirname, 'uploads', 'supportpage', 'cards'),
+    path.join(__dirname, 'uploads', 'supportpage', 'solutions'),
+    path.join(__dirname, 'uploads', 'supportpage', 'lifecycle'),
+    path.join(__dirname, 'uploads', 'supportpage', 'faq'),
+    path.join(__dirname, 'uploads', 'supportpage', 'cta')
   ];
   
   dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
-      console.log(`📁 Created directory: ${dir}`);
     }
   });
 };
@@ -72,6 +107,7 @@ app.use('/api/homepage', homePageRoutes);
 app.use('/api/aboutpage', aboutPageRoutes);
 app.use('/api/servicepage', servicePageRoutes);
 app.use('/api/supportpage', supportPageRoutes); 
+app.use('/api/quotes', quoteRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -245,4 +245,4 @@ const supportPageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const SupportPage = mongoose.model('SupportPage', supportPageSchema);
-export default SupportPage;
+export default SupportPage;             
