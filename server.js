@@ -14,6 +14,7 @@ import productRoutes from './routes/product.routes.js';
 import contactRoutes from './routes/contact.routes.js';
 import contactInfoRoutes from './routes/contactinfo.routes.js';
 import homePageRoutes from './routes/homepage.routes.js';
+import aboutPageRoutes from './routes/aboutpage.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,7 +67,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/contact-info', contactInfoRoutes);
 app.use('/api/homepage', homePageRoutes);
-
+app.use('/api/aboutpage', aboutPageRoutes);
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Server is running', timestamp: new Date() });
