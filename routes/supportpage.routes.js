@@ -39,7 +39,7 @@ import {
   updateSupportCta,
   getSupportCta,
   deleteSupportCta
-} from '../controllers/supportPage.controller.js';
+} from '../controllers/supportpage.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
