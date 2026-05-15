@@ -16,6 +16,7 @@ import contactInfoRoutes from './routes/contactinfo.routes.js';
 import homePageRoutes from './routes/homepage.routes.js';
 import aboutPageRoutes from './routes/aboutpage.routes.js';
 import servicePageRoutes from './routes/servicepage.routes.js';
+import supportPageRoutes from './routes/supportpage.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,6 +71,8 @@ app.use('/api/contact-info', contactInfoRoutes);
 app.use('/api/homepage', homePageRoutes);
 app.use('/api/aboutpage', aboutPageRoutes);
 app.use('/api/servicepage', servicePageRoutes);
+app.use('/api/supportpage', supportPageRoutes); 
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Server is running', timestamp: new Date() });
