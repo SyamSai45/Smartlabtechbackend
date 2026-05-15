@@ -2,7 +2,11 @@ import express from 'express';
 import multer from 'multer';
 import {
   getHomePage,
-  createHero, getHero, updateHero, deleteHero,
+  addHero,
+  getAllHero,
+  getHeroById,
+  updateHero,
+  deleteHero,
   createAbout, getAbout, updateAbout, deleteAbout,
   addAboutPoint, updateAboutPoint, deleteAboutPoint,
   createAchievements, getAchievements, updateAchievements, deleteAchievements,
@@ -18,11 +22,12 @@ const upload = multer({ dest: 'uploads/temp/' });
 // ==================== PUBLIC ====================
 router.get('/', getHomePage);
 
-// ==================== HERO SECTION CRUD ====================
-router.post('/hero', upload.single('image'), createHero);
-router.get('/hero', getHero);
-router.put('/hero', upload.single('image'), updateHero);
-router.delete('/hero', deleteHero);
+// ==================== HERO SECTION CRUD (ARRAY) ====================
+router.post('/hero', upload.single('image'), addHero);
+router.get('/hero', getAllHero);
+router.get('/hero/:index', getHeroById);
+router.put('/hero/:index', upload.single('image'), updateHero);
+router.delete('/hero/:index', deleteHero);
 
 // ==================== ABOUT SECTION CRUD ====================
 router.post('/about', upload.single('image'), createAbout);

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
-// Hero Section Schema
-const heroSchema = new mongoose.Schema({
+// Hero Section Schema (Array of objects)
+const heroItemSchema = new mongoose.Schema({
   image: { type: String, required: true },
   title: { type: String, required: true },
   tag: { type: String, default: '' },
@@ -50,7 +50,7 @@ const testimonialsSchema = new mongoose.Schema({
 
 // Main Home Page Schema
 const homePageSchema = new mongoose.Schema({
-  hero: heroSchema,
+  hero: [heroItemSchema],  // Changed to array
   about: aboutSchema,
   achievements: achievementsSchema,
   testimonials: testimonialsSchema,

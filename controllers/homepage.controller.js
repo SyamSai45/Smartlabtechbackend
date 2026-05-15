@@ -32,7 +32,15 @@ const saveFile = async (file, folder) => {
 // Helper: Add full URLs to response
 const addFullUrls = (data, baseUrl) => {
   const result = { ...data };
-  if (result.hero?.image && !result.hero.image.startsWith('http')) result.hero.image = `${baseUrl}${result.hero.image}`;
+  
+  // Hero array - add URLs to each hero item
+  if (result.hero && Array.isArray(result.hero)) {
+    result.hero = result.hero.map(item => ({
+      ...item,
+      image: item.image && !item.image.startsWith('http') ? `${baseUrl}${item.image}` : item.image
+    }));
+  }
+  
   if (result.about?.image && !result.about.image.startsWith('http')) result.about.image = `${baseUrl}${result.about.image}`;
   if (result.achievements?.images) {
     result.achievements.images = result.achievements.images.map(img => img && !img.startsWith('http') ? `${baseUrl}${img}` : img);
@@ -59,69 +67,119 @@ export const getHomePage = async (req, res) => {
   }
 };
 
-// ==================== HERO SECTION CRUD ====================
-export const createHero = async (req, res) => {
+// ==================== HERO SECTION CRUD (ARRAY) ====================
+
+// Add Hero Item
+export const addHero = async (req, res) => {
   try {
     let homePage = await HomePage.findOne();
     if (!homePage) homePage = new HomePage();
+    if (!homePage.hero) homePage.hero = [];
     
     const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
-    homePage.hero = {
+    
+    homePage.hero.push({
       image: image || '',
       title: req.body.title,
       tag: req.body.tag || '',
       isActive: req.body.isActive === 'true'
-    };
+    });
     
     await homePage.save();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.status(201).json({ success: true, message: 'Hero created', data: addFullUrls(homePage.toObject(), baseUrl).hero });
+    const heroWithUrls = homePage.hero.map(item => ({
+      ...item.toObject(),
+      image: item.image && !item.image.startsWith('http') ? `${baseUrl}${item.image}` : item.image
+    }));
+    
+    res.status(201).json({ success: true, message: 'Hero item added', data: heroWithUrls });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const getHero = async (req, res) => {
+// Get All Hero Items
+export const getAllHero = async (req, res) => {
   try {
     const homePage = await HomePage.findOne();
-    if (!homePage || !homePage.hero) return res.status(404).json({ success: false, message: 'Hero not found' });
+    if (!homePage || !homePage.hero || homePage.hero.length === 0) {
+      return res.status(404).json({ success: false, message: 'No hero items found' });
+    }
     
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.json({ success: true, data: addFullUrls({ hero: homePage.hero }, baseUrl).hero });
+    const heroWithUrls = homePage.hero.map(item => ({
+      ...item.toObject(),
+      image: item.image && !item.image.startsWith('http') ? `${baseUrl}${item.image}` : item.image
+    }));
+    
+    res.json({ success: true, data: heroWithUrls });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// Get Single Hero Item by Index
+export const getHeroById = async (req, res) => {
+  try {
+    const { index } = req.params;
+    const homePage = await HomePage.findOne();
+    
+    if (!homePage || !homePage.hero || index < 0 || index >= homePage.hero.length) {
+      return res.status(404).json({ success: false, message: 'Hero item not found' });
+    }
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const heroItem = homePage.hero[index].toObject();
+    heroItem.image = heroItem.image && !heroItem.image.startsWith('http') ? `${baseUrl}${heroItem.image}` : heroItem.image;
+    
+    res.json({ success: true, data: heroItem });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Hero Item by Index
 export const updateHero = async (req, res) => {
   try {
+    const { index } = req.params;
     const homePage = await HomePage.findOne();
-    if (!homePage) return res.status(404).json({ success: false, message: 'Home page not found' });
     
-    const image = req.file ? await saveFile(req.file, 'hero') : req.body.image || homePage.hero?.image;
-    homePage.hero = {
-      image: image || '',
-      title: req.body.title || homePage.hero?.title,
-      tag: req.body.tag || homePage.hero?.tag,
-      isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' : homePage.hero?.isActive
-    };
+    if (!homePage || !homePage.hero || index < 0 || index >= homePage.hero.length) {
+      return res.status(404).json({ success: false, message: 'Hero item not found' });
+    }
+    
+    const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
+    
+    if (image) homePage.hero[index].image = image;
+    if (req.body.title) homePage.hero[index].title = req.body.title;
+    if (req.body.tag !== undefined) homePage.hero[index].tag = req.body.tag;
+    if (req.body.isActive !== undefined) homePage.hero[index].isActive = req.body.isActive === 'true';
     
     await homePage.save();
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.json({ success: true, message: 'Hero updated', data: addFullUrls(homePage.toObject(), baseUrl).hero });
+    const heroItem = homePage.hero[index].toObject();
+    heroItem.image = heroItem.image && !heroItem.image.startsWith('http') ? `${baseUrl}${heroItem.image}` : heroItem.image;
+    
+    res.json({ success: true, message: 'Hero item updated', data: heroItem });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// Delete Hero Item by Index
 export const deleteHero = async (req, res) => {
   try {
+    const { index } = req.params;
     const homePage = await HomePage.findOne();
-    if (!homePage) return res.status(404).json({ success: false, message: 'Home page not found' });
     
-    homePage.hero = undefined;
+    if (!homePage || !homePage.hero || index < 0 || index >= homePage.hero.length) {
+      return res.status(404).json({ success: false, message: 'Hero item not found' });
+    }
+    
+    homePage.hero.splice(index, 1);
     await homePage.save();
-    res.json({ success: true, message: 'Hero deleted' });
+    
+    res.json({ success: true, message: 'Hero item deleted' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
