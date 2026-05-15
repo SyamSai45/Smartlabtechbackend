@@ -13,7 +13,7 @@ import {
   addAchievementImage, updateAchievementImage, deleteAchievementImage,
   createTestimonials, getTestimonials, updateTestimonials, deleteTestimonials,
   addTestimonial, updateTestimonial, deleteTestimonial
-} from '../controllers/homePage.controller.js';
+} from '../controllers/homepage.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
