@@ -1,4 +1,165 @@
-import { Subject, Contact } from '../models/Contact.js';
+import { Subject, Contact, ContactPage } from '../models/Contact.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Helper: Save uploaded file
+const saveFile = async (file, folder) => {
+  if (!file) return null;
+  
+  if (typeof file === 'string' && (file.startsWith('http://') || file.startsWith('https://'))) {
+    return file;
+  }
+  
+  const uploadDir = path.join(__dirname, '../uploads/contactpage', folder);
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  
+  const timestamp = Date.now();
+  const random = Math.round(Math.random() * 1E9);
+  const ext = path.extname(file.originalname);
+  const filename = `${folder}-${timestamp}-${random}${ext}`;
+  const destPath = path.join(uploadDir, filename);
+  
+  fs.copyFileSync(file.path, destPath);
+  try { fs.unlinkSync(file.path); } catch(e) {}
+  
+  return `/uploads/contactpage/${folder}/${filename}`;
+};
+
+// Helper: Convert string to boolean
+const toBoolean = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    return value === 'true' || value === '1' || value === 'yes';
+  }
+  return Boolean(value);
+};
+
+// Helper: Add full URLs to response
+const addFullUrls = (data, baseUrl) => {
+  const result = { ...data };
+  
+  if (result.hero?.image && !result.hero.image.startsWith('http')) {
+    result.hero.image = `${baseUrl}${result.hero.image}`;
+  }
+  
+  return result;
+};
+
+// ==================== CONTACT PAGE HERO MANAGEMENT ====================
+
+// @desc    Create contact page hero (Admin)
+// @route   POST /api/contact/hero
+export const createContactHero = async (req, res) => {
+  try {
+    let contactPage = await ContactPage.findOne();
+    if (!contactPage) contactPage = new ContactPage();
+    
+    if (contactPage.hero) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Contact hero already exists. Use updateContactHero to update.' 
+      });
+    }
+    
+    const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
+    contactPage.hero = {
+      title: req.body.title,
+      tag: req.body.tag,
+      description: req.body.description,
+      image: image || '',
+      isActive: toBoolean(req.body.isActive)
+    };
+    await contactPage.save();
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.status(201).json({ 
+      success: true, 
+      message: 'Contact hero created', 
+      data: addFullUrls(contactPage.toObject(), baseUrl).hero 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update contact page hero (Admin)
+// @route   PUT /api/contact/hero
+export const updateContactHero = async (req, res) => {
+  try {
+    const contactPage = await ContactPage.findOne();
+    if (!contactPage || !contactPage.hero) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Contact hero not found. Use createContactHero first.' 
+      });
+    }
+    
+    const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
+    
+    if (req.body.title !== undefined) contactPage.hero.title = req.body.title;
+    if (req.body.tag !== undefined) contactPage.hero.tag = req.body.tag;
+    if (req.body.description !== undefined) contactPage.hero.description = req.body.description;
+    if (image) contactPage.hero.image = image;
+    if (req.body.isActive !== undefined) contactPage.hero.isActive = toBoolean(req.body.isActive);
+    
+    await contactPage.save();
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({ 
+      success: true, 
+      message: 'Contact hero updated', 
+      data: addFullUrls(contactPage.toObject(), baseUrl).hero 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get contact page hero (Public)
+// @route   GET /api/contact/hero
+export const getContactHero = async (req, res) => {
+  try {
+    const contactPage = await ContactPage.findOne();
+    if (!contactPage || !contactPage.hero) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Contact hero not found' 
+      });
+    }
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({ 
+      success: true, 
+      data: addFullUrls({ hero: contactPage.hero }, baseUrl).hero 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete contact page hero (Admin)
+// @route   DELETE /api/contact/hero
+export const deleteContactHero = async (req, res) => {
+  try {
+    const contactPage = await ContactPage.findOne();
+    if (!contactPage) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Contact page not found' 
+      });
+    }
+    contactPage.hero = undefined;
+    await contactPage.save();
+    res.json({ 
+      success: true, 
+      message: 'Contact hero deleted' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // ==================== SUBJECT MANAGEMENT ====================
 
@@ -94,13 +255,11 @@ export const updateSubject = async (req, res) => {
     console.log('🔍 Updating subject ID:', id);
     console.log('📝 Update data:', { name, description, isActive });
 
-    // Build update object with only provided fields
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (isActive !== undefined) updateData.isActive = isActive;
 
-    // If no fields to update, return error
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ 
         success: false, 
@@ -108,7 +267,6 @@ export const updateSubject = async (req, res) => {
       });
     }
 
-    // Check if subject exists
     const subject = await Subject.findById(id);
     
     if (!subject) {
@@ -118,7 +276,6 @@ export const updateSubject = async (req, res) => {
       });
     }
 
-    // Check if name already exists (if name is being updated)
     if (name && name !== subject.name) {
       const existingSubject = await Subject.findOne({ 
         name: name, 
@@ -132,13 +289,12 @@ export const updateSubject = async (req, res) => {
       }
     }
 
-    // Update the document
     const updatedSubject = await Subject.findByIdAndUpdate(
       id,
       updateData,
       { 
-        new: true,           // Return updated document
-        runValidators: true  // Run validators
+        new: true,
+        runValidators: true
       }
     );
 
@@ -217,7 +373,6 @@ export const submitContactForm = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
 
-    // Validate required fields
     if (!name || !email || !phone || !subject || !message) {
       return res.status(400).json({ 
         success: false, 
@@ -225,7 +380,6 @@ export const submitContactForm = async (req, res) => {
       });
     }
 
-    // Verify subject exists and is active
     const subjectDoc = await Subject.findOne({ 
       _id: subject, 
       isActive: true 
@@ -238,7 +392,6 @@ export const submitContactForm = async (req, res) => {
       });
     }
 
-    // Create new contact entry
     const contact = await Contact.create({
       name,
       email,
@@ -248,7 +401,6 @@ export const submitContactForm = async (req, res) => {
       status: 'pending'
     });
 
-    // Populate subject details for response
     await contact.populate('subject', 'name description');
 
     res.status(201).json({ 
@@ -285,7 +437,11 @@ export const getAllContacts = async (req, res) => {
     if (subject) query.subject = subject;
     
     if (search) {
-      query.$text = { $search: search };
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } }
+      ];
     }
 
     const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
@@ -328,7 +484,6 @@ export const getContactById = async (req, res) => {
       });
     }
 
-    // Mark as read if it was pending
     if (contact.status === 'pending') {
       contact.status = 'read';
       await contact.save();
@@ -409,7 +564,6 @@ export const getContactStats = async (req, res) => {
     const replied = await Contact.countDocuments({ status: 'replied' });
     const archived = await Contact.countDocuments({ status: 'archived' });
 
-    // Get counts by subject
     const subjectStats = await Contact.aggregate([
       { $lookup: { from: 'subjects', localField: 'subject', foreignField: '_id', as: 'subjectInfo' } },
       { $unwind: '$subjectInfo' },
@@ -417,7 +571,6 @@ export const getContactStats = async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // Get recent submissions (last 7 days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     
@@ -425,7 +578,6 @@ export const getContactStats = async (req, res) => {
       createdAt: { $gte: sevenDaysAgo }
     });
 
-    // Get total subjects count
     const totalSubjects = await Subject.countDocuments({ isActive: true });
 
     res.json({
@@ -444,4 +596,4 @@ export const getContactStats = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
-}; 
+};

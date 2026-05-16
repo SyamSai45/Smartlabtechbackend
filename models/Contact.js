@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-// Subject Schema (embedded in Contact)
+// Subject Schema
 const subjectSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -18,7 +18,43 @@ const subjectSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Main Contact Schema
+// Contact Hero Schema
+const contactHeroSchema = new mongoose.Schema({
+  title: {
+    type: String, 
+    required: [true, 'Contact hero title is required'],
+    trim: true
+  },
+  tag: {
+    type: String,
+    required: [true, 'Contact hero tag is required'],
+    trim: true
+  },
+  description: {
+    type: String, 
+    required: [true, 'Contact hero description is required'],
+    trim: true
+  },
+  image: {
+    type: String,
+    required: [true, 'Contact hero image is required']
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+});
+
+// Contact Page Schema
+const contactPageSchema = new mongoose.Schema({
+  hero: contactHeroSchema,
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, { timestamps: true });
+
+// Main Contact Schema (No indexes)
 const contactSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -43,6 +79,10 @@ const contactSchema = new mongoose.Schema({
     ref: 'Subject',
     required: [true, 'Subject is required']
   },
+  subjectName: {
+    type: String,
+    required: true
+  },
   message: {
     type: String,
     required: [true, 'Message is required'],
@@ -59,13 +99,10 @@ const contactSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Create Subject model
+// Create models
 const Subject = mongoose.model('Subject', subjectSchema);
-
-// Create Contact model
 const Contact = mongoose.model('Contact', contactSchema);
+const ContactPage = mongoose.model('ContactPage', contactPageSchema);
 
-// Index for search
-contactSchema.index({ name: 'text', email: 'text', message: 'text' });
-
-export { Subject, Contact };
+// Export all models
+export { Subject, Contact, ContactPage };

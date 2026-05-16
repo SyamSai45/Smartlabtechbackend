@@ -77,7 +77,11 @@ const createUploadDirs = () => {
     path.join(__dirname, 'uploads', 'blogpage'),
     path.join(__dirname, 'uploads', 'blogpage', 'hero'),
     path.join(__dirname, 'uploads', 'blogpage', 'blogs'),
-    path.join(__dirname, 'uploads', 'blogpage', 'authors')
+    path.join(__dirname, 'uploads', 'blogpage', 'authors'),
+
+    // CONTACT page directories
+    path.join(__dirname, 'uploads', 'contactpage'),
+    path.join(__dirname, 'uploads', 'contactpage', 'hero'),
   ];
   
   dirs.forEach(dir => {

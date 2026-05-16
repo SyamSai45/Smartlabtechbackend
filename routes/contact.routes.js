@@ -1,5 +1,9 @@
 import express from 'express';
 import {
+  createContactHero,
+  getContactHero,
+  updateContactHero,
+  deleteContactHero,
   // Subject Management
   createSubject,
   getAllSubjects,
@@ -20,6 +24,12 @@ import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
+// ==================== CONTACT HERO (ADMIN) ====================
+router.post('/hero', createContactHero);
+router.get('/hero', getContactHero);
+router.put('/hero', updateContactHero);
+router.delete('/hero', deleteContactHero);
+
 // ==================== PUBLIC ROUTES ====================
 router.get('/subjects/active', getActiveSubjects);
 router.post('/submit', submitContactForm);
@@ -35,7 +45,7 @@ router.delete('/subjects/:id', deleteSubject);
 // ==================== CONTACT MANAGEMENT (ADMIN ONLY) ====================
 router.get('/stats', getContactStats);
 router.get('/all', getAllContacts);
-router.get('/:id', getContactById);
+router.get('/:id', getContactById); 
 router.put('/:id/status', updateContactStatus);
 router.delete('/:id', deleteContact);
 
