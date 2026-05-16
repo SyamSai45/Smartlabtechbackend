@@ -65,15 +65,44 @@ export const createContactHero = async (req, res) => {
       });
     }
     
-    const image = req.file ? await saveFile(req.file, 'hero') : req.body.image;
+    // Validate required fields
+    if (!req.body.title) {
+      return res.status(400).json({ success: false, message: 'Title is required' });
+    }
+    if (!req.body.tag) {
+      return res.status(400).json({ success: false, message: 'Tag is required' });
+    }
+    if (!req.body.description) {
+      return res.status(400).json({ success: false, message: 'Description is required' });
+    }
+    
+    // Get image from file upload or body
+    let image = null;
+    if (req.file) {
+      image = await saveFile(req.file, 'hero');
+    } else if (req.body.image) {
+      image = req.body.image;
+    }
+    
+    // Check if image is provided
+    if (!image) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Image is required. Please upload an image or provide an image URL.' 
+      });
+    }
+    
     contactPage.hero = {
       title: req.body.title,
       tag: req.body.tag,
       description: req.body.description,
-      image: image || '',
-      isActive: toBoolean(req.body.isActive)
+      image: image,  // Don't allow empty string
+      isActive: req.body.isActive !== undefined ? toBoolean(req.body.isActive) : true
     };
+    
     await contactPage.save();
+
+    console.log('✅ Contact hero created:', contactPage.hero);
     
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.status(201).json({ 
@@ -82,6 +111,7 @@ export const createContactHero = async (req, res) => {
       data: addFullUrls(contactPage.toObject(), baseUrl).hero 
     });
   } catch (error) {
+    console.error('Create contact hero error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
