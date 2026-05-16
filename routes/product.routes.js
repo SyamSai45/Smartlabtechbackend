@@ -9,7 +9,8 @@ import {
   deleteProduct,
   getFeaturedProducts,
   getProductsByBrand,
-  getProductsByCategory
+  getProductsByCategory,
+  toggleProductStatus
 } from '../controllers/product.controller.js';
 import { uploadProductImages } from '../config/multer.config.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
@@ -27,6 +28,6 @@ router.get('/:id', getProductById);
 router.post('/', uploadProductImages, createProduct);
 router.put('/:id', uploadProductImages, updateProduct);
 router.delete('/:id', deleteProduct);
-
+router.patch('/:id/toggle', toggleProductStatus);
 
 export default router;

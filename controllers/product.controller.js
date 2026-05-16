@@ -495,3 +495,50 @@ export const deleteProduct = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+// @desc    Toggle product active status
+// @route   PATCH /api/products/:id/toggle
+export const toggleProductStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find product by ID
+    const product = await Product.findById(id);
+    
+    if (!product) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Product not found' 
+      });
+    }
+    
+    // Toggle the isActive status
+    product.isActive = !product.isActive;
+    
+    // Save the updated product
+    await product.save();
+    
+    // Populate brand and category for response
+    await product.populate('brand', 'name logo');
+    await product.populate('category', 'name');
+    
+    // Convert relative paths to full URLs
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const responseData = addFullUrls(product, baseUrl);
+    
+    const statusMessage = product.isActive ? 'activated' : 'deactivated';
+    
+    res.json({ 
+      success: true, 
+      message: `Product ${statusMessage} successfully`,
+      data: responseData
+    });
+  } catch (error) {
+    console.error('Toggle product status error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
