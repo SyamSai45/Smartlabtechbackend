@@ -20,6 +20,7 @@ import supportPageRoutes from './routes/supportpage.routes.js';
 import quoteRoutes from './routes/quote.routes.js';
 import blogPageRoutes from './routes/blogpage.routes.js';
 import footerRoutes from './routes/footer.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -122,6 +123,7 @@ app.use('/api/supportpage', supportPageRoutes);
 app.use('/api/quotes', quoteRoutes);
 app.use('/api/blogs', blogPageRoutes);
 app.use('/api/footer', footerRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

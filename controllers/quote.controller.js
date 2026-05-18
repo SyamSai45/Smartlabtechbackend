@@ -2,7 +2,10 @@ import Quote from '../models/Quote.js';
 import Category from '../models/Category.js';
 import Product from '../models/Product.js';
 
-// ==================== SUBMIT QUOTE REQUEST ====================
+import Notification from '../models/Notification.js';
+import { createNotification } from './notification.controller.js';
+
+// Update your submitQuoteRequest function
 export const submitQuoteRequest = async (req, res) => {
   try {
     const { 
@@ -10,7 +13,6 @@ export const submitQuoteRequest = async (req, res) => {
       category, product, usage, quantity 
     } = req.body;
     
-    // Validate required fields
     if (!name || !phoneNumber || !email || !company || !city || !category || !product || !usage || !quantity) {
       return res.status(400).json({ 
         success: false, 
@@ -18,13 +20,11 @@ export const submitQuoteRequest = async (req, res) => {
       });
     }
     
-    // Verify category exists (using existing Category model)
     const categoryDoc = await Category.findById(category);
     if (!categoryDoc) {
       return res.status(400).json({ success: false, message: 'Invalid category selected' });
     }
     
-    // Verify product exists and belongs to the category (using existing Product model)
     const productDoc = await Product.findById(product);
     if (!productDoc) {
       return res.status(400).json({ success: false, message: 'Invalid product selected' });
@@ -37,7 +37,6 @@ export const submitQuoteRequest = async (req, res) => {
       });
     }
     
-    // Create quote request
     const quote = await Quote.create({
       name,
       phoneNumber,
@@ -53,8 +52,17 @@ export const submitQuoteRequest = async (req, res) => {
       status: 'pending'
     });
     
-    await quote.populate('category', 'name');
-    await quote.populate('product', 'name mainImage price');
+    await quote.populate('category product');
+    
+    // Create notification for admin
+    await createNotification('quote', quote._id, 'Quote', {
+      name: quote.name,
+      email: quote.email,
+      company: quote.company,
+      productName: quote.productName,
+      quantity: quote.quantity,
+      usage: quote.usage
+    });
     
     res.status(201).json({
       success: true,
