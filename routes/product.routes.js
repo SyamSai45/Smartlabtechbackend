@@ -12,8 +12,12 @@ import {
   getProductsByCategory,
   toggleProductStatus,
   searchProducts,
-  getSearchSuggestions,
-  getSearchFilters
+  getSearchFilters,
+  addProductSuggestion,
+  getProductSuggestions,
+  removeProductSuggestion,
+  toggleSuggestionStatus,
+  bulkAddProductSuggestions
 } from '../controllers/product.controller.js';
 import { uploadProductImages } from '../config/multer.config.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
@@ -22,8 +26,14 @@ const router = express.Router();
 
 // ==================== SEARCH ROUTES (MUST COME FIRST) ====================
 router.get('/search', searchProducts);
-router.get('/search/suggestions', getSearchSuggestions);
 router.get('/search/filters', getSearchFilters);
+
+router.get('/suggestions', getProductSuggestions);
+router.get('/suggestions/admin', getProductSuggestions);
+router.post('/suggestions', addProductSuggestion);
+router.post('/suggestions/bulk', bulkAddProductSuggestions);
+router.patch('/suggestions/:productId/toggle', toggleSuggestionStatus);
+router.delete('/suggestions/:productId', removeProductSuggestion);
 
 // ==================== OTHER PUBLIC ROUTES ====================
 router.get('/featured', getFeaturedProducts);

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+
 const highlightSchema = new mongoose.Schema({
   icon: { type: String, default: 'zap' },
   label: { type: String, required: true },
@@ -159,7 +160,6 @@ productSchema.pre('save', function(next) {
 
 // Index for search
 productSchema.index({ name: 'text', shortDesc: 'text', fullDesc: 'text' });
-
 
 const Product = mongoose.model('Product', productSchema);
 export default Product;

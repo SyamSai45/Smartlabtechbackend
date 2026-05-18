@@ -1,6 +1,7 @@
 import Product from '../models/Product.js';
 import Brand from '../models/Brand.js';
 import Category from '../models/Category.js';
+import Suggestion from '../models/Suggestion.js';
 import fs from 'fs';
 import {
   processMainImage,
@@ -544,8 +545,6 @@ export const toggleProductStatus = async (req, res) => {
 };
 
 
-// Add this to your controllers/product.controller.js
-
 // @desc    Advanced search products with filters
 // @route   GET /api/products/search
 export const searchProducts = async (req, res) => {
@@ -691,96 +690,214 @@ export const searchProducts = async (req, res) => {
   }
 };
 
-// @desc    Get search suggestions (autocomplete)
-// @route   GET /api/products/search/suggestions
-export const getSearchSuggestions = async (req, res) => {
+// ==================== PRODUCT SUGGESTIONS CRUD ====================
+
+// @desc    Get all product suggestions (Public)
+// @route   GET /api/products/suggestions
+export const getProductSuggestions = async (req, res) => {
   try {
-    const { q, limit = 10 } = req.query;
+    const { limit = 20 } = req.query;
     
-    if (!q || q.trim() === '') {
-      return res.json({ success: true, data: [] });
-    }
-    
-    const searchRegex = { $regex: q.trim(), $options: 'i' };
-    
-    // Get matching products with more fields
-    const products = await Product.find(
-      { name: searchRegex, isActive: true },
-      { 
-        _id: 1, 
-        name: 1, 
-        slug: 1, 
-        mainImage: 1, 
-        brandName: 1,
-        categoryName: 1
-      }
-    )
-    .populate('brand', 'name logo')
-    .limit(parseInt(limit));
-    
-    // Get unique categories matching search
-    const categories = await Product.distinct('categoryName', {
-      categoryName: searchRegex,
-      isActive: true
-    });
-    
-    // Get unique brands matching search with their IDs
-    const brands = await Product.aggregate([
-      { 
-        $match: { 
-          brandName: searchRegex, 
-          isActive: true 
-        } 
-      },
-      { 
-        $group: { 
-          _id: { 
-            id: '$brand', 
-            name: '$brandName' 
-          } 
-        } 
-      },
-      { 
-        $project: { 
-          _id: 0,
-          id: '$_id.id',
-          name: '$_id.name'
-        } 
-      },
-      { $limit: parseInt(limit) }
-    ]);
+    const suggestions = await Suggestion.find({ isActive: true })
+      .populate({
+        path: 'productId',
+        populate: { path: 'brand', select: 'name logo' }
+      })
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit));
     
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
-    const suggestions = {
-      products: products.map(p => ({
-        type: 'product',
-        id: p._id,
-        name: p.name,
-        slug: p.slug,
-        brandName: p.brandName,
-        categoryName: p.categoryName,
-        image: p.mainImage ? `${baseUrl}${p.mainImage}` : null,
-        brand: p.brand ? {
-          id: p.brand._id,
-          name: p.brand.name,
-          logo: p.brand.logo ? `${baseUrl}${p.brand.logo}` : null
-        } : null
-      })),
-      categories: categories.filter(c => c).map(c => ({ 
-        type: 'category', 
-        name: c 
-      })),
-      brands: brands.filter(b => b && b.id && b.name).map(b => ({ 
-        type: 'brand',
-        id: b.id,
-        name: b.name 
-      }))
+    const formattedSuggestions = {
+      products: suggestions.map(suggestion => {
+        const product = suggestion.productId;
+        if (!product) return null;
+        
+        return {
+          type: 'product',
+          id: product._id,
+          name: product.name,
+          slug: product.slug,
+          brandName: product.brandName,
+          categoryName: product.categoryName,
+          image: product.mainImage ? `${baseUrl}${product.mainImage}` : null,
+          price: product.discountedPrice || product.price,
+          brand: product.brand ? {
+            id: product.brand._id,
+            name: product.brand.name,
+            logo: product.brand.logo ? `${baseUrl}${product.brand.logo}` : null
+          } : null
+        };
+      }).filter(Boolean),
+      categories: [],
+      brands: []
     };
     
-    res.json({ success: true, data: suggestions });
+    res.json({ success: true, data: formattedSuggestions });
   } catch (error) {
-    console.error('Search suggestions error:', error);
+    console.error('Get suggestions error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Add product to suggestions (Admin)
+// @route   POST /api/products/suggestions
+export const addProductSuggestion = async (req, res) => {
+  try {
+    const { productId } = req.body;
+    
+    if (!productId) {
+      return res.status(400).json({ success: false, message: 'Product ID is required' });
+    }
+    
+    // Check if product exists
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    
+    // Check if already in suggestions
+    const existingSuggestion = await Suggestion.findOne({ productId });
+    if (existingSuggestion) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Product already in suggestions' 
+      });
+    }
+    
+    // Create suggestion
+    await Suggestion.create({
+      productId,
+      isActive: true
+    });
+    
+    // Get the created suggestion with populated product
+    const newSuggestion = await Suggestion.findOne({ productId })
+      .populate({
+        path: 'productId',
+        populate: { path: 'brand', select: 'name logo' }
+      });
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const productData = newSuggestion.productId;
+    
+    const formattedSuggestion = {
+      type: 'product',
+      id: productData._id,
+      name: productData.name,
+      slug: productData.slug,
+      brandName: productData.brandName,
+      categoryName: productData.categoryName,
+      image: productData.mainImage ? `${baseUrl}${productData.mainImage}` : null,
+      price: productData.discountedPrice || productData.price,
+      isActive: newSuggestion.isActive,
+      brand: productData.brand ? {
+        id: productData.brand._id,
+        name: productData.brand.name,
+        logo: productData.brand.logo ? `${baseUrl}${productData.brand.logo}` : null
+      } : null
+    };
+    
+    res.status(201).json({ 
+      success: true, 
+      message: 'Product added to suggestions successfully', 
+      data: formattedSuggestion 
+    });
+  } catch (error) {
+    console.error('Add suggestion error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Remove product from suggestions
+// @route   DELETE /api/products/suggestions/:productId
+export const removeProductSuggestion = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    const suggestion = await Suggestion.findOneAndDelete({ productId });
+    
+    if (!suggestion) {
+      return res.status(404).json({ success: false, message: 'Suggestion not found' });
+    }
+    
+    res.json({ success: true, message: 'Product removed from suggestions successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Toggle suggestion active status
+// @route   PATCH /api/products/suggestions/:productId/toggle
+export const toggleSuggestionStatus = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    const suggestion = await Suggestion.findOne({ productId });
+    if (!suggestion) {
+      return res.status(404).json({ success: false, message: 'Suggestion not found' });
+    }
+    
+    suggestion.isActive = !suggestion.isActive;
+    await suggestion.save();
+    
+    res.json({ 
+      success: true, 
+      message: `Suggestion ${suggestion.isActive ? 'activated' : 'deactivated'} successfully`,
+      data: { productId, isActive: suggestion.isActive }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Bulk add products to suggestions
+// @route   POST /api/products/suggestions/bulk
+export const bulkAddProductSuggestions = async (req, res) => {
+  try {
+    const { productIds } = req.body;
+    
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Product IDs array is required' });
+    }
+    
+    const results = {
+      added: [],
+      skipped: [],
+      notFound: []
+    };
+    
+    for (const productId of productIds) {
+      // Check if already exists
+      const existing = await Suggestion.findOne({ productId });
+      if (existing) {
+        results.skipped.push(productId);
+        continue;
+      }
+      
+      // Check if product exists
+      const product = await Product.findById(productId);
+      if (!product) {
+        results.notFound.push(productId);
+        continue;
+      }
+      
+      // Create suggestion
+      await Suggestion.create({
+        productId,
+        isActive: true
+      });
+      
+      results.added.push(productId);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `${results.added.length} products added, ${results.skipped.length} skipped, ${results.notFound.length} not found`,
+      data: results
+    });
+  } catch (error) {
+    console.error('Bulk add suggestions error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
