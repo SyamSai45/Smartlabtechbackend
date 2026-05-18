@@ -542,3 +542,297 @@ export const toggleProductStatus = async (req, res) => {
     });
   }
 };
+
+
+// Add this to your controllers/product.controller.js
+
+// @desc    Advanced search products with filters
+// @route   GET /api/products/search
+export const searchProducts = async (req, res) => {
+  try {
+    const startTime = Date.now();
+    
+    const {
+      q,
+      category,
+      brand,
+      minPrice,
+      maxPrice,
+      inStock,
+      isFeatured,
+      minRating,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const query = { isActive: true };
+
+    // Text search on available fields
+    if (q && q.trim() !== '') {
+      const searchTerm = q.trim();
+      const searchRegex = { $regex: searchTerm, $options: 'i' };
+      
+      // Build $or array - only for string fields that exist in your schema
+      const orConditions = [
+        { name: searchRegex },
+        { shortDesc: searchRegex },
+        { fullDesc: searchRegex },
+        { categoryName: searchRegex },
+        { brandName: searchRegex },
+        { 'specifications.readability': searchRegex },
+        { 'specifications.capacity': searchRegex },
+        { 'specifications.panSize': searchRegex },
+        { 'specifications.display': searchRegex }
+      ];
+      
+      query.$or = orConditions;
+    }
+
+    // Apply filters
+    if (category) {
+      // Check if category is ObjectId or string
+      if (category.match(/^[0-9a-fA-F]{24}$/)) {
+        query.category = category;
+      } else {
+        query.categoryName = { $regex: category, $options: 'i' };
+      }
+    }
+    
+    if (brand) {
+      // Check if brand is ObjectId or string
+      if (brand.match(/^[0-9a-fA-F]{24}$/)) {
+        query.brand = brand;
+      } else {
+        query.brandName = { $regex: brand, $options: 'i' };
+      }
+    }
+    
+    if (inStock === 'true') query.inStock = true;
+    if (isFeatured === 'true') query.isFeatured = true;
+    
+    // Price range
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = parseFloat(minPrice);
+      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+    }
+    
+    // Rating filter
+    if (minRating) {
+      query.rating = { $gte: parseFloat(minRating) };
+    }
+
+    // Sorting
+    const sort = {};
+    if (sortBy === 'price') {
+      sort.discountedPrice = sortOrder === 'desc' ? -1 : 1;
+    } else if (sortBy === 'rating') {
+      sort.rating = sortOrder === 'desc' ? -1 : 1;
+    } else if (sortBy === 'name') {
+      sort.name = sortOrder === 'desc' ? -1 : 1;
+    } else {
+      sort.createdAt = sortOrder === 'desc' ? -1 : 1;
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Execute search
+    const [products, total] = await Promise.all([
+      Product.find(query)
+        .populate('brand', 'name logo description website')
+        .populate('category', 'name')
+        .sort(sort)
+        .limit(parseInt(limit))
+        .skip(skip),
+      Product.countDocuments(query)
+    ]);
+
+    const responseTime = Date.now() - startTime;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    // Add full URLs to products
+    const productsWithUrls = products.map(product => {
+      const productObj = product.toObject();
+      if (productObj.mainImage && !productObj.mainImage.startsWith('http')) {
+        productObj.mainImage = `${baseUrl}${productObj.mainImage}`;
+      }
+      if (productObj.gallery && productObj.gallery.length) {
+        productObj.gallery = productObj.gallery.map(img => 
+          img && !img.startsWith('http') ? `${baseUrl}${img}` : img
+        );
+      }
+      if (productObj.brand?.logo && !productObj.brand.logo.startsWith('http')) {
+        productObj.brand.logo = `${baseUrl}${productObj.brand.logo}`;
+      }
+      return productObj;
+    });
+
+    res.json({
+      success: true,
+      count: productsWithUrls.length,
+      data: productsWithUrls,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      meta: {
+        query: q || null,
+        responseTime: `${responseTime}ms`,
+        totalResults: total
+      }
+    });
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get search suggestions (autocomplete)
+// @route   GET /api/products/search/suggestions
+export const getSearchSuggestions = async (req, res) => {
+  try {
+    const { q, limit = 10 } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return res.json({ success: true, data: [] });
+    }
+    
+    const searchRegex = { $regex: q.trim(), $options: 'i' };
+    
+    // Get matching products with more fields
+    const products = await Product.find(
+      { name: searchRegex, isActive: true },
+      { 
+        _id: 1, 
+        name: 1, 
+        slug: 1, 
+        mainImage: 1, 
+        brandName: 1,
+        categoryName: 1
+      }
+    )
+    .populate('brand', 'name logo')
+    .limit(parseInt(limit));
+    
+    // Get unique categories matching search
+    const categories = await Product.distinct('categoryName', {
+      categoryName: searchRegex,
+      isActive: true
+    });
+    
+    // Get unique brands matching search with their IDs
+    const brands = await Product.aggregate([
+      { 
+        $match: { 
+          brandName: searchRegex, 
+          isActive: true 
+        } 
+      },
+      { 
+        $group: { 
+          _id: { 
+            id: '$brand', 
+            name: '$brandName' 
+          } 
+        } 
+      },
+      { 
+        $project: { 
+          _id: 0,
+          id: '$_id.id',
+          name: '$_id.name'
+        } 
+      },
+      { $limit: parseInt(limit) }
+    ]);
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    const suggestions = {
+      products: products.map(p => ({
+        type: 'product',
+        id: p._id,
+        name: p.name,
+        slug: p.slug,
+        brandName: p.brandName,
+        categoryName: p.categoryName,
+        image: p.mainImage ? `${baseUrl}${p.mainImage}` : null,
+        brand: p.brand ? {
+          id: p.brand._id,
+          name: p.brand.name,
+          logo: p.brand.logo ? `${baseUrl}${p.brand.logo}` : null
+        } : null
+      })),
+      categories: categories.filter(c => c).map(c => ({ 
+        type: 'category', 
+        name: c 
+      })),
+      brands: brands.filter(b => b && b.id && b.name).map(b => ({ 
+        type: 'brand',
+        id: b.id,
+        name: b.name 
+      }))
+    };
+    
+    res.json({ success: true, data: suggestions });
+  } catch (error) {
+    console.error('Search suggestions error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get filter options (categories, brands, price range)
+// @route   GET /api/products/search/filters
+export const getSearchFilters = async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    let baseQuery = { isActive: true };
+    
+    if (q && q.trim() !== '') {
+      baseQuery.$or = [
+        { name: { $regex: q, $options: 'i' } },
+        { categoryName: { $regex: q, $options: 'i' } },
+        { brandName: { $regex: q, $options: 'i' } }
+      ];
+    }
+    
+    // Get unique categories
+    const categories = await Product.distinct('categoryName', baseQuery);
+    
+    // Get unique brands
+    const brands = await Product.aggregate([
+      { $match: baseQuery },
+      { $group: { _id: { id: '$brand', name: '$brandName' } } },
+      { $project: { _id: 0, id: '$_id.id', name: '$_id.name' } }
+    ]);
+    
+    // Get price range
+    const priceStats = await Product.aggregate([
+      { $match: baseQuery },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: '$price' },
+          maxPrice: { $max: '$price' }
+        }
+      }
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        categories: categories.filter(c => c).sort(),
+        brands: brands.filter(b => b && b.name).sort((a, b) => a.name.localeCompare(b.name)),
+        priceRange: priceStats[0] || { minPrice: 0, maxPrice: 0 }
+      }
+    });
+  } catch (error) {
+    console.error('Search filters error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

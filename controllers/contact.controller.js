@@ -403,6 +403,7 @@ export const submitContactForm = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
 
+    // Validate required fields
     if (!name || !email || !phone || !subject || !message) {
       return res.status(400).json({ 
         success: false, 
@@ -410,6 +411,7 @@ export const submitContactForm = async (req, res) => {
       });
     }
 
+    // Find and validate subject
     const subjectDoc = await Subject.findOne({ 
       _id: subject, 
       isActive: true 
@@ -422,11 +424,13 @@ export const submitContactForm = async (req, res) => {
       });
     }
 
+    // Create contact with subjectName
     const contact = await Contact.create({
       name,
       email,
       phone,
       subject: subjectDoc._id,
+      subjectName: subjectDoc.name, // ✅ THIS WAS MISSING
       message,
       status: 'pending'
     });
@@ -443,10 +447,10 @@ export const submitContactForm = async (req, res) => {
       const messages = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
+    console.error('Submit contact form error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // @desc    Get all contact submissions (Admin only)
 // @route   GET /api/contact/all
 export const getAllContacts = async (req, res) => {

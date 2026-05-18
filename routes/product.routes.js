@@ -10,21 +10,33 @@ import {
   getFeaturedProducts,
   getProductsByBrand,
   getProductsByCategory,
-  toggleProductStatus
+  toggleProductStatus,
+  searchProducts,
+  getSearchSuggestions,
+  getSearchFilters
 } from '../controllers/product.controller.js';
 import { uploadProductImages } from '../config/multer.config.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
+// ==================== SEARCH ROUTES (MUST COME FIRST) ====================
+router.get('/search', searchProducts);
+router.get('/search/suggestions', getSearchSuggestions);
+router.get('/search/filters', getSearchFilters);
+
+// ==================== OTHER PUBLIC ROUTES ====================
 router.get('/featured', getFeaturedProducts);
 router.get('/brand/:brandId', getProductsByBrand);
 router.get('/category/:categoryId', getProductsByCategory);
 router.get('/name/:name', getProductByName);
-router.get('/slug/:slug', getProductBySlug);   
+router.get('/slug/:slug', getProductBySlug);
 router.get('/', getAllProducts);
-router.get('/:id', getProductById);            
 
+// ==================== ID ROUTE (MUST COME LAST) ====================
+router.get('/:id', getProductById);
+
+// ==================== ADMIN ROUTES ====================
 router.post('/', uploadProductImages, createProduct);
 router.put('/:id', uploadProductImages, updateProduct);
 router.delete('/:id', deleteProduct);
