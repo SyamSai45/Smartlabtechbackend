@@ -13,7 +13,7 @@ import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-
+// router.use(protect); // All routes require authentication
 
 // Get routes
 router.get('/', getAllNotifications);
