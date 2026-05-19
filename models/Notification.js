@@ -4,7 +4,7 @@ const notificationSchema = new mongoose.Schema({
   // Type of notification
   type: {
     type: String,
-    enum: ['contact', 'quote', 'order', 'system'],
+    enum: ['contact', 'quote', 'service', 'order', 'system'],
     required: true
   },
   
@@ -31,7 +31,7 @@ const notificationSchema = new mongoose.Schema({
   
   referenceModel: {
     type: String,
-    enum: ['Contact', 'Quote'],
+    enum: ['Contact', 'Quote', 'ServiceForm'],
     required: true
   },
   
@@ -66,7 +66,6 @@ const notificationSchema = new mongoose.Schema({
     default: true
   }
 }, { timestamps: true });
-
 
 const Notification = mongoose.model('Notification', notificationSchema);
 export default Notification;

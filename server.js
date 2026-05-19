@@ -22,6 +22,7 @@ import blogPageRoutes from './routes/blogpage.routes.js';
 import footerRoutes from './routes/footer.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
+import resourcePageRoutes from './routes/resourcepage.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +67,10 @@ const createUploadDirs = () => {
     path.join(__dirname, 'uploads', 'servicespage', 'servicehero'),
     path.join(__dirname, 'uploads', 'servicespage', 'servicecatalogue'),
     path.join(__dirname, 'uploads', 'servicespage', 'servicesupport'),
+    path.join(__dirname, 'uploads', 'servicespage', 'popup'), // Added popup directory
+    
+    // Service Form directory (for service request attachments)
+    path.join(__dirname, 'uploads', 'serviceform'),
     
     // Support page directories
     path.join(__dirname, 'uploads', 'supportpage'),
@@ -82,14 +87,19 @@ const createUploadDirs = () => {
     path.join(__dirname, 'uploads', 'blogpage', 'blogs'),
     path.join(__dirname, 'uploads', 'blogpage', 'authors'),
 
-    // CONTACT page directories
+    // Contact page directories
     path.join(__dirname, 'uploads', 'contactpage'),
     path.join(__dirname, 'uploads', 'contactpage', 'hero'),
+    
+    // Footer uploads
+    path.join(__dirname, 'uploads', 'footer'),
+    path.join(__dirname, 'uploads', 'footer', 'policies')
   ];
   
   dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
+      console.log(`📁 Created directory: ${dir}`);
     }
   });
 };
@@ -125,7 +135,8 @@ app.use('/api/quotes', quoteRoutes);
 app.use('/api/blogs', blogPageRoutes);
 app.use('/api/footer', footerRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/dashboard', dashboardRoutes); 
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/resources', resourcePageRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -138,4 +149,6 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5101;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📁 Uploads directory: ${path.join(__dirname, 'uploads')}`);
+  console.log(`🌐 Static files URL: http://localhost:${PORT}/uploads/`);
 });

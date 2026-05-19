@@ -7,17 +7,20 @@ import {
   markAllAsRead,
   deleteNotification,
   deleteAllRead,
-  permanentDeleteNotification
+  permanentDeleteNotification,
+  getNotificationsByType
 } from '../controllers/notification.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// router.use(protect); // All routes require authentication
+// All notification routes require admin authentication
+// router.use(protect, authorize('admin'));
 
 // Get routes
 router.get('/', getAllNotifications);
 router.get('/unread/count', getUnreadCount);
+router.get('/type/:type', getNotificationsByType);
 router.get('/:id', getNotificationById);
 
 // Update routes

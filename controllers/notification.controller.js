@@ -1,6 +1,7 @@
 import Notification from '../models/Notification.js';
 import { Contact } from '../models/Contact.js';
 import Quote from '../models/Quote.js';
+import {ServiceForm} from '../models/ServicePage.js';
 
 // Helper: Create notification
 export const createNotification = async (type, referenceId, referenceModel, data) => {
@@ -16,6 +17,10 @@ export const createNotification = async (type, referenceId, referenceModel, data
     } else if (type === 'quote') {
       title = `New Quote Request`;
       message = `${data.name} (${data.company}) has requested a quote for ${data.quantity} x ${data.productName}`;
+      priority = 'urgent';
+    } else if (type === 'service') {
+      title = `New Service Request`;
+      message = `${data.contactPerson} (${data.companyDetails}) has submitted a service request for ${data.instrumentType} (Model: ${data.modelNo})`;
       priority = 'urgent';
     }
     
@@ -37,8 +42,6 @@ export const createNotification = async (type, referenceId, referenceModel, data
     return null;
   }
 };
-
-// ==================== GET NOTIFICATIONS ====================
 
 // @desc    Get all notifications (Admin)
 // @route   GET /api/notifications
@@ -66,6 +69,42 @@ export const getAllNotifications = async (req, res) => {
       success: true,
       data: notifications,
       unreadCount,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get notifications by type (Admin)
+// @route   GET /api/notifications/type/:type
+export const getNotificationsByType = async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+    
+    const validTypes = ['contact', 'quote', 'service', 'order', 'system'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ success: false, message: 'Invalid notification type' });
+    }
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const notifications = await Notification.find({ type, isActive: true })
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+    
+    const total = await Notification.countDocuments({ type, isActive: true });
+    
+    res.json({
+      success: true,
+      data: notifications,
       pagination: {
         total,
         page: parseInt(page),
@@ -134,7 +173,7 @@ export const markAllAsRead = async (req, res) => {
   }
 };
 
-// @desc    Delete notification
+// @desc    Delete notification (soft delete)
 // @route   DELETE /api/notifications/:id
 export const deleteNotification = async (req, res) => {
   try {

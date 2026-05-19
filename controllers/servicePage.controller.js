@@ -1,4 +1,6 @@
-import ServicesPage from '../models/ServicePage.js';
+import {ServicesPage, ServiceForm} from '../models/ServicePage.js';
+import Notification from '../models/Notification.js';
+import { createNotification } from './notification.controller.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -38,6 +40,9 @@ const addFullUrls = (data, baseUrl) => {
   }
   if (result.serviceSupport?.image && !result.serviceSupport.image.startsWith('http')) {
     result.serviceSupport.image = `${baseUrl}${result.serviceSupport.image}`;
+  }
+  if (result.popup?.image && !result.popup.image.startsWith('http')) {
+    result.popup.image = `${baseUrl}${result.popup.image}`;
   }
   
   return result;
@@ -625,6 +630,483 @@ export const deleteServiceSupport = async (req, res) => {
     await servicesPage.save();
     res.json({ success: true, message: 'Service support deleted' });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+// Helper: Create notification for admin
+const createServiceNotification = async (serviceRequest, type = 'new') => {
+  try {
+    let title = '';
+    let message = '';
+    let priority = 'high';
+    
+    if (type === 'new') {
+      title = `New Service Request`;
+      message = `${serviceRequest.contactPerson} from ${serviceRequest.companyDetails} has submitted a service request for ${serviceRequest.instrumentType} (Model: ${serviceRequest.modelNo})`;
+      priority = 'urgent';
+    } else if (type === 'status') {
+      title = `Service Request Status Updated`;
+      message = `Service request for ${serviceRequest.instrumentType} (${serviceRequest.modelNo}) status changed to ${serviceRequest.status}`;
+      priority = 'medium';
+    }
+    
+    const notification = await Notification.create({
+      type: 'service',
+      title,
+      message,
+      referenceId: serviceRequest._id,
+      referenceModel: 'ServiceForm',
+      priority,
+      data: {
+        companyDetails: serviceRequest.companyDetails,
+        contactPerson: serviceRequest.contactPerson,
+        instrumentType: serviceRequest.instrumentType,
+        modelNo: serviceRequest.modelNo,
+        status: serviceRequest.status
+      },
+      isRead: false,
+      isActive: true
+    });
+    
+    return notification;
+  } catch (error) {
+    console.error('Create service notification error:', error);
+    return null;
+  }
+};
+
+// ==================== CREATE SERVICE REQUEST ====================
+
+// @desc    Submit service request (Public)
+// @route   POST /api/service-form/submit
+export const submitServiceRequest = async (req, res) => {
+  try {
+    const {
+      companyDetails, unit, location,
+      contactPerson, designation,
+      contactNo, email,
+      instrumentType, modelNo, serialNo,
+      natureOfProblem, contractType, poNumber
+    } = req.body;
+
+    // Validate required fields
+    if (!companyDetails || !unit || !location || !contactPerson || !designation ||
+        !contactNo || !email || !instrumentType || !modelNo || !serialNo ||
+        !natureOfProblem || !contractType || !poNumber) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'All fields are required' 
+      });
+    }
+
+    // Create service request
+    const serviceRequest = await ServiceForm.create({
+      companyDetails, unit, location,
+      contactPerson, designation,
+      contactNo, email,
+      instrumentType, modelNo, serialNo,
+      natureOfProblem, contractType, poNumber,
+      status: 'pending',
+      isActive: true
+    });
+
+    // Create notification for admin
+    await createServiceNotification(serviceRequest, 'new');
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Service request submitted successfully', 
+      data: serviceRequest 
+    });
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ success: false, message: messages.join(', ') });
+    }
+    console.error('Submit service request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== GET SERVICE REQUESTS ====================
+
+// @desc    Get all service requests (Admin)
+// @route   GET /api/service-form/admin
+export const getAllServiceRequests = async (req, res) => {
+  try {
+    const {
+      status,
+      page = 1,
+      limit = 20,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const query = { isActive: true };
+    
+    if (status) query.status = status;
+    
+    if (search) {
+      query.$or = [
+        { companyDetails: { $regex: search, $options: 'i' } },
+        { contactPerson: { $regex: search, $options: 'i' } },
+        { instrumentType: { $regex: search, $options: 'i' } },
+        { modelNo: { $regex: search, $options: 'i' } },
+        { serialNo: { $regex: search, $options: 'i' } },
+        { poNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [serviceRequests, total] = await Promise.all([
+      ServiceForm.find(query)
+        .sort(sort)
+        .limit(parseInt(limit))
+        .skip(skip),
+      ServiceForm.countDocuments(query)
+    ]);
+
+    res.json({
+      success: true,
+      data: serviceRequests,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get all service requests error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get service request by ID (Admin)
+// @route   GET /api/service-form/admin/:id
+export const getServiceRequestById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const serviceRequest = await ServiceForm.findById(id);
+    
+    if (!serviceRequest) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    res.json({ success: true, data: serviceRequest });
+  } catch (error) {
+    console.error('Get service request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get service requests by status (Admin)
+// @route   GET /api/service-form/admin/status/:status
+export const getServiceRequestsByStatus = async (req, res) => {
+  try {
+    const { status } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    
+    const validStatuses = ['pending', 'assigned', 'in-progress', 'resolved', 'closed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const [serviceRequests, total] = await Promise.all([
+      ServiceForm.find({ status, isActive: true })
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit))
+        .skip(skip),
+      ServiceForm.countDocuments({ status, isActive: true })
+    ]);
+    
+    res.json({
+      success: true,
+      data: serviceRequests,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get service requests by status error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== UPDATE SERVICE REQUEST ====================
+
+// @desc    Update service request status (Admin)
+// @route   PUT /api/service-form/admin/:id/status
+export const updateServiceStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    const validStatuses = ['pending', 'assigned', 'in-progress', 'resolved', 'closed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status value' });
+    }
+    
+    const serviceRequest = await ServiceForm.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true, runValidators: true }
+    );
+    
+    if (!serviceRequest) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    // Create notification for status change
+    await createServiceNotification(serviceRequest, 'status');
+    
+    res.json({ 
+      success: true, 
+      message: 'Service request status updated successfully', 
+      data: serviceRequest 
+    });
+  } catch (error) {
+    console.error('Update service status error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update service request (Admin)
+// @route   PUT /api/service-form/admin/:id
+export const updateServiceRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const serviceRequest = await ServiceForm.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    if (!serviceRequest) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Service request updated successfully', 
+      data: serviceRequest 
+    });
+  } catch (error) {
+    console.error('Update service request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== DELETE SERVICE REQUEST ====================
+
+// @desc    Delete service request (Soft delete - Admin)
+// @route   DELETE /api/service-form/admin/:id
+export const deleteServiceRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const serviceRequest = await ServiceForm.findByIdAndUpdate(
+      id,
+      { isActive: false },
+      { new: true }
+    );
+    
+    if (!serviceRequest) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    res.json({ success: true, message: 'Service request deleted successfully' });
+  } catch (error) {
+    console.error('Delete service request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Permanent delete service request (Admin)
+// @route   DELETE /api/service-form/admin/:id/permanent
+export const permanentDeleteServiceRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const serviceRequest = await ServiceForm.findByIdAndDelete(id);
+    
+    if (!serviceRequest) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    res.json({ success: true, message: 'Service request permanently deleted' });
+  } catch (error) {
+    console.error('Permanent delete service request error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== SERVICE REQUEST STATISTICS ====================
+
+// @desc    Get service request statistics (Admin)
+// @route   GET /api/service-form/admin/stats
+export const getServiceStats = async (req, res) => {
+  try {
+    const total = await ServiceForm.countDocuments({ isActive: true });
+    const pending = await ServiceForm.countDocuments({ status: 'pending', isActive: true });
+    const assigned = await ServiceForm.countDocuments({ status: 'assigned', isActive: true });
+    const inProgress = await ServiceForm.countDocuments({ status: 'in-progress', isActive: true });
+    const resolved = await ServiceForm.countDocuments({ status: 'resolved', isActive: true });
+    const closed = await ServiceForm.countDocuments({ status: 'closed', isActive: true });
+    const cancelled = await ServiceForm.countDocuments({ status: 'cancelled', isActive: true });
+    
+    // Get recent requests (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recent = await ServiceForm.countDocuments({
+      createdAt: { $gte: sevenDaysAgo },
+      isActive: true
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        total,
+        pending,
+        assigned,
+        inProgress,
+        resolved,
+        closed,
+        cancelled,
+        recent
+      }
+    });
+  } catch (error) {
+    console.error('Get service stats error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+// ==================== POPUP SECTION CRUD ====================
+
+// @desc    Create/Update popup image (Admin)
+// @route   POST /api/servicepage/popup
+export const createPopup = async (req, res) => {
+  try {
+    let servicesPage = await ServicesPage.findOne();
+    if (!servicesPage) servicesPage = new ServicesPage();
+    
+    const image = req.file ? await saveFile(req.file, 'popup') : req.body.image;
+    
+    servicesPage.popup = {
+      image: image || null,
+      isActive: req.body.isActive === 'true' || req.body.isActive === true
+    };
+    
+    await servicesPage.save();
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const popupData = servicesPage.popup;
+    if (popupData.image && !popupData.image.startsWith('http')) {
+      popupData.image = `${baseUrl}${popupData.image}`;
+    }
+    
+    res.status(201).json({ 
+      success: true, 
+      message: 'Popup image created/updated successfully', 
+      data: popupData 
+    });
+  } catch (error) {
+    console.error('Create popup error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update popup image (Admin)
+// @route   PUT /api/servicepage/popup
+export const updatePopup = async (req, res) => {
+  try {
+    let servicesPage = await ServicesPage.findOne();
+    if (!servicesPage) {
+      return res.status(404).json({ success: false, message: 'Services page not found' });
+    }
+    
+    const image = req.file ? await saveFile(req.file, 'popup') : req.body.image;
+    
+    if (!servicesPage.popup) {
+      servicesPage.popup = {};
+    }
+    
+    if (image !== undefined) servicesPage.popup.image = image;
+    if (req.body.isActive !== undefined) {
+      servicesPage.popup.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    }
+    
+    await servicesPage.save();
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const popupData = servicesPage.popup;
+    if (popupData.image && !popupData.image.startsWith('http')) {
+      popupData.image = `${baseUrl}${popupData.image}`;
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Popup image updated successfully', 
+      data: popupData 
+    });
+  } catch (error) {
+    console.error('Update popup error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get popup image (Public)
+// @route   GET /api/servicepage/popup
+export const getPopup = async (req, res) => {
+  try {
+    const servicesPage = await ServicesPage.findOne();
+    if (!servicesPage || !servicesPage.popup) {
+      return res.status(404).json({ success: false, message: 'Popup not found' });
+    }
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const popupData = servicesPage.popup.toObject();
+    if (popupData.image && !popupData.image.startsWith('http')) {
+      popupData.image = `${baseUrl}${popupData.image}`;
+    }
+    
+    res.json({ success: true, data: popupData });
+  } catch (error) {
+    console.error('Get popup error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Delete popup image (Admin)
+// @route   DELETE /api/servicepage/popup
+export const deletePopup = async (req, res) => {
+  try {
+    const servicesPage = await ServicesPage.findOne();
+    if (!servicesPage) {
+      return res.status(404).json({ success: false, message: 'Services page not found' });
+    }
+    
+    servicesPage.popup = undefined;
+    await servicesPage.save();
+    
+    res.json({ success: true, message: 'Popup image deleted successfully' });
+  } catch (error) {
+    console.error('Delete popup error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
