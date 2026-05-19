@@ -46,7 +46,7 @@ import {
   updatePopup,
   getPopup,
   deletePopup
-} from '../controllers/servicepage.controller.js';
+} from '../controllers/servicePage.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
