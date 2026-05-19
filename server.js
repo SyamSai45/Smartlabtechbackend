@@ -23,6 +23,7 @@ import footerRoutes from './routes/footer.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import resourcePageRoutes from './routes/resourcepage.routes.js';
+import authRoutes from './routes/auth.routes.js';  // Add auth routes
 import errorHandler from './middleware/error.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -67,9 +68,9 @@ const createUploadDirs = () => {
     path.join(__dirname, 'uploads', 'servicespage', 'servicehero'),
     path.join(__dirname, 'uploads', 'servicespage', 'servicecatalogue'),
     path.join(__dirname, 'uploads', 'servicespage', 'servicesupport'),
-    path.join(__dirname, 'uploads', 'servicespage', 'popup'), // Added popup directory
+    path.join(__dirname, 'uploads', 'servicespage', 'popup'),
     
-    // Service Form directory (for service request attachments)
+    // Service Form directory
     path.join(__dirname, 'uploads', 'serviceform'),
     
     // Support page directories
@@ -93,7 +94,14 @@ const createUploadDirs = () => {
     
     // Footer uploads
     path.join(__dirname, 'uploads', 'footer'),
-    path.join(__dirname, 'uploads', 'footer', 'policies')
+    path.join(__dirname, 'uploads', 'footer', 'policies'),
+    
+    // Resource page directories
+    path.join(__dirname, 'uploads', 'resources'),
+    path.join(__dirname, 'uploads', 'resources', 'hero'),
+    path.join(__dirname, 'uploads', 'resources', 'articles'),
+    path.join(__dirname, 'uploads', 'resources', 'pdfs'),
+    path.join(__dirname, 'uploads', 'resources', 'casestudies')
   ];
   
   dirs.forEach(dir => {
@@ -122,6 +130,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 console.log(`📁 Static files served from: ${path.join(__dirname, 'uploads')}`);
 
 // Routes
+app.use('/api/auth', authRoutes);  // Add auth routes FIRST
 app.use('/api/brands', brandRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
