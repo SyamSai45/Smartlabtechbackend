@@ -22,7 +22,7 @@ router.get('/:id', getBlogById);
 
 // Blog Hero (Admin)
 router.route('/hero')
-  .get(protect, authorize('admin'), getBlogHero)
+  .get(getBlogHero)
   .post(protect, authorize('admin'), upload.single('image'), createBlogHero)
   .put(protect, authorize('admin'), upload.single('image'), updateBlogHero)
   .delete(protect, authorize('admin'), deleteBlogHero);

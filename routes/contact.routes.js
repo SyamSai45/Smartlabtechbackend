@@ -24,7 +24,7 @@ router.route('/hero')
 
 // Subjects (Admin)
 router.route('/subjects')
-  .get(protect, authorize('admin'), getAllSubjects)
+  .get(getAllSubjects)
   .post(protect, authorize('admin'), createSubject);
 router.route('/subjects/:id')
   .get(protect, authorize('admin'), getSubjectById)
@@ -33,8 +33,8 @@ router.route('/subjects/:id')
 router.patch('/subjects/:id/toggle', protect, authorize('admin'), toggleSubjectStatus);
 
 // Contact Submissions (Admin)
-router.get('/all', protect, authorize('admin'), getAllContacts);
-router.get('/stats', protect, authorize('admin'), getContactStats);
+router.get('/all', getAllContacts);
+router.get('/stats', getContactStats);
 router.route('/:id')
   .get(protect, authorize('admin'), getContactById)
   .put(protect, authorize('admin'), updateContactStatus)
