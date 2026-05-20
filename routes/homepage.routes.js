@@ -24,14 +24,14 @@ router.get('/', getHomePage);
 
 // ==================== HERO SECTION CRUD (ADMIN ONLY) ====================
 router.post('/hero', protect, authorize('admin'), upload.single('image'), addHero);
-router.get('/hero', protect, authorize('admin'), getAllHero);
+router.get('/hero',  getAllHero);
 router.get('/hero/:index', protect, authorize('admin'), getHeroById);
 router.put('/hero/:index', protect, authorize('admin'), upload.single('image'), updateHero);
 router.delete('/hero/:index', protect, authorize('admin'), deleteHero);
 
 // ==================== ABOUT SECTION CRUD (ADMIN ONLY) ====================
 router.post('/about', protect, authorize('admin'), upload.single('image'), createAbout);
-router.get('/about', protect, authorize('admin'), getAbout);
+router.get('/about',  getAbout);
 router.put('/about', protect, authorize('admin'), upload.single('image'), updateAbout);
 router.delete('/about', protect, authorize('admin'), deleteAbout);
 
@@ -42,7 +42,7 @@ router.delete('/about/points/:index', protect, authorize('admin'), deleteAboutPo
 
 // ==================== ACHIEVEMENTS SECTION CRUD (ADMIN ONLY) ====================
 router.post('/achievements', protect, authorize('admin'), upload.array('images', 20), createAchievements);
-router.get('/achievements', protect, authorize('admin'), getAchievements);
+router.get('/achievements',  getAchievements);
 router.put('/achievements', protect, authorize('admin'), upload.array('images', 20), updateAchievements);
 router.delete('/achievements', protect, authorize('admin'), deleteAchievements);
 
@@ -53,7 +53,7 @@ router.delete('/achievements/images/:index', protect, authorize('admin'), delete
 
 // ==================== TESTIMONIALS SECTION CRUD (ADMIN ONLY) ====================
 router.post('/testimonials', protect, authorize('admin'), createTestimonials);
-router.get('/testimonials', protect, authorize('admin'), getTestimonials);
+router.get('/testimonials',  getTestimonials);
 router.put('/testimonials', protect, authorize('admin'), updateTestimonials);
 router.delete('/testimonials', protect, authorize('admin'), deleteTestimonials);
 
