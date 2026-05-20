@@ -12,14 +12,14 @@ import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Public routes (no authentication required)
+// Public routes
 router.get('/', getAllBrands);
-router.get('/options', getBrandOptions);  // For product dropdown
+router.get('/options', getBrandOptions);
 router.get('/:id', getBrandById);
 
-// Admin only routes
-router.post('/',  uploadBrandLogo, createBrand);
-router.put('/:id', uploadBrandLogo, updateBrand);
-router.delete('/:id', deleteBrand);
+// Admin routes
+router.post('/', protect, authorize('admin'), uploadBrandLogo, createBrand);
+router.put('/:id', protect, authorize('admin'), uploadBrandLogo, updateBrand);
+router.delete('/:id', protect, authorize('admin'), deleteBrand);
 
 export default router;

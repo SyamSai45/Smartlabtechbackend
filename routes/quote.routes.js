@@ -16,10 +16,10 @@ const router = express.Router();
 router.post('/submit', submitQuoteRequest);
 
 // ==================== ADMIN ROUTES ====================
-router.get('/admin/quotes', getAllQuotes);
-router.get('/admin/stats', getQuoteStats);
-router.get('/admin/quotes/:id', getQuoteById);
-router.put('/admin/quotes/:id', updateQuoteStatus);
-router.delete('/admin/quotes/:id', deleteQuote);
+router.get('/admin/quotes', protect, authorize('admin'), getAllQuotes);
+router.get('/admin/stats', protect, authorize('admin'), getQuoteStats);
+router.get('/admin/quotes/:id', protect, authorize('admin'), getQuoteById);
+router.put('/admin/quotes/:id', protect, authorize('admin'), updateQuoteStatus);
+router.delete('/admin/quotes/:id', protect, authorize('admin'), deleteQuote);
 
 export default router;

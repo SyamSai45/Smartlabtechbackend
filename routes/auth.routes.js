@@ -6,7 +6,6 @@ import {
   updateProfile,
   changePassword,
   getAllAdmins,
-  getAdminById,
   toggleAdminStatus,
   deleteAdmin
 } from '../controllers/auth.controller.js';
@@ -18,14 +17,13 @@ const router = express.Router();
 router.post('/register', register);
 router.post('/login', login);
 
-// ==================== PROTECTED ROUTES (Admin only) ====================
+// ==================== PROTECTED ROUTES ====================
 router.get('/me', protect, getMe);
 router.put('/update-profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);
 
-// ==================== ADMIN MANAGEMENT (Admin only) ====================
+// ==================== ADMIN MANAGEMENT ====================
 router.get('/admins', protect, getAllAdmins);
-router.get('/admins/:id', protect, getAdminById);
 router.patch('/admins/:id/toggle', protect, toggleAdminStatus);
 router.delete('/admins/:id', protect, deleteAdmin);
 

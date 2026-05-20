@@ -1,54 +1,43 @@
 import express from 'express';
-import  multer from 'multer';
+import multer from 'multer';
 import {
-  createContactHero,
-  getContactHero,
-  updateContactHero,
-  deleteContactHero,
-  // Subject Management
-  createSubject,
-  getAllSubjects,
-  getActiveSubjects,
-  getSubjectById,
-  updateSubject,
-  deleteSubject,
-  toggleSubjectStatus,
-  // Contact Management
-  submitContactForm,
-  getAllContacts,
-  getContactById,
-  updateContactStatus,
-  deleteContact,
-  getContactStats
+  createContactHero, updateContactHero, getContactHero, deleteContactHero,
+  createSubject, getAllSubjects, getActiveSubjects, getSubjectById,
+  updateSubject, deleteSubject, toggleSubjectStatus,
+  submitContactForm, getAllContacts, getContactById, updateContactStatus, deleteContact, getContactStats
 } from '../controllers/contact.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 const upload = multer({ dest: 'uploads/temp/' });
 
-// ==================== CONTACT HERO (ADMIN) ====================
-router.post('/hero', upload.single('image'), createContactHero);
+// Public routes
 router.get('/hero', getContactHero);
-router.put('/hero', upload.single('image'), updateContactHero);
-router.delete('/hero', deleteContactHero);
-
-// ==================== PUBLIC ROUTES ====================
 router.get('/subjects/active', getActiveSubjects);
 router.post('/submit', submitContactForm);
 
-// ==================== SUBJECT MANAGEMENT (ADMIN ONLY) ====================
-router.post('/subjects', createSubject);
-router.get('/subjects', getAllSubjects);
-router.get('/subject/:id', getSubjectById);
-router.put('/subjects/:id', updateSubject);
-router.patch('/subjects/:id/toggle', toggleSubjectStatus);
-router.delete('/subjects/:id', deleteSubject);
+// Contact Hero (Admin)
+router.route('/hero')
+  .post(protect, authorize('admin'), upload.single('image'), createContactHero)
+  .put(protect, authorize('admin'), upload.single('image'), updateContactHero)
+  .delete(protect, authorize('admin'), deleteContactHero);
 
-// ==================== CONTACT MANAGEMENT (ADMIN ONLY) ====================
-router.get('/stats', getContactStats);
-router.get('/all', getAllContacts);
-router.get('/:id', getContactById); 
-router.put('/:id/status', updateContactStatus);
-router.delete('/:id', deleteContact);
+// Subjects (Admin)
+router.route('/subjects')
+  .get(protect, authorize('admin'), getAllSubjects)
+  .post(protect, authorize('admin'), createSubject);
+router.route('/subjects/:id')
+  .get(protect, authorize('admin'), getSubjectById)
+  .put(protect, authorize('admin'), updateSubject)
+  .delete(protect, authorize('admin'), deleteSubject);
+router.patch('/subjects/:id/toggle', protect, authorize('admin'), toggleSubjectStatus);
+
+// Contact Submissions (Admin)
+router.get('/all', protect, authorize('admin'), getAllContacts);
+router.get('/stats', protect, authorize('admin'), getContactStats);
+router.route('/:id')
+  .get(protect, authorize('admin'), getContactById)
+  .put(protect, authorize('admin'), updateContactStatus)
+  .delete(protect, authorize('admin'), deleteContact);
 
 export default router;

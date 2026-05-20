@@ -1,35 +1,29 @@
 import express from 'express';
 import {
   getAllNotifications,
+  getNotificationsByType,
   getUnreadCount,
   getNotificationById,
   markAsRead,
   markAllAsRead,
   deleteNotification,
   deleteAllRead,
-  permanentDeleteNotification,
-  getNotificationsByType
+  permanentDeleteNotification
 } from '../controllers/notification.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// All notification routes require admin authentication
-// router.use(protect, authorize('admin'));
+router.use(protect, authorize('admin'));
 
-// Get routes
 router.get('/', getAllNotifications);
 router.get('/unread/count', getUnreadCount);
 router.get('/type/:type', getNotificationsByType);
 router.get('/:id', getNotificationById);
-
-// Update routes
-router.put('/:id/read', markAsRead);
 router.put('/read-all', markAllAsRead);
-
-// Delete routes
-router.delete('/:id', deleteNotification);
+router.put('/:id/read', markAsRead);
 router.delete('/read/all', deleteAllRead);
 router.delete('/:id/permanent', permanentDeleteNotification);
+router.delete('/:id', deleteNotification);
 
 export default router;

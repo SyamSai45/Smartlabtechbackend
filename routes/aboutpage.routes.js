@@ -1,39 +1,32 @@
 import express from 'express';
 import multer from 'multer';
 import {
+  // Full Page
   getAboutPage,
   createAboutPage,
   updateAboutPage,
   deleteAboutPage,
+  // Hero
   createHero,
   updateHero,
   getHero,
   deleteHero,
+  // About Section
   createAbout,
   updateAbout,
   getAbout,
   deleteAbout,
+  // Cards
   addCard,
   getAllCards,
-  getCardById,
-  updateCard,
   deleteCard,
-  createCoreValues,
-  updateCoreValues,
-  getCoreValues,
+  // Core Values
   addCoreValue,
-  getCoreValueById,
-  updateCoreValue,
   deleteCoreValue,
-  deleteCoreValues,
-  createWhyChooseUs,
-  updateWhyChooseUs,
-  getWhyChooseUs,
+  // Why Choose Us
   addWhyChoosePoint,
-  getWhyChoosePointById,
-  updateWhyChoosePoint,
   deleteWhyChoosePoint,
-  deleteWhyChooseUs,
+  // CTA
   createCta,
   updateCta,
   getCta,
@@ -47,54 +40,40 @@ const upload = multer({ dest: 'uploads/temp/' });
 // ==================== PUBLIC ====================
 router.get('/', getAboutPage);
 
-// ==================== FULL PAGE CRUD ====================
-router.post('/', createAboutPage);
-router.put('/', updateAboutPage);
-router.delete('/', deleteAboutPage);
+// ==================== FULL PAGE (ADMIN) ====================
+router.post('/', protect, authorize('admin'), createAboutPage);
+router.put('/', protect, authorize('admin'), updateAboutPage);
+router.delete('/', protect, authorize('admin'), deleteAboutPage);
 
-// ==================== HERO CRUD ====================
-router.post('/hero', upload.single('image'), createHero);
-router.put('/hero', upload.single('image'), updateHero);
-router.get('/hero', getHero);
-router.delete('/hero', deleteHero);
+// ==================== HERO (ADMIN) ====================
+router.post('/hero', protect, authorize('admin'), upload.single('image'), createHero);
+router.put('/hero', protect, authorize('admin'), upload.single('image'), updateHero);
+router.get('/hero', protect, authorize('admin'), getHero);
+router.delete('/hero', protect, authorize('admin'), deleteHero);
 
-// ==================== ABOUT CRUD ====================
-router.post('/about', upload.single('bgImage'), createAbout);
-router.put('/about', upload.single('bgImage'), updateAbout);
-router.get('/about', getAbout);
-router.delete('/about', deleteAbout);
+// ==================== ABOUT SECTION (ADMIN) ====================
+router.post('/about', protect, authorize('admin'), upload.single('bgImage'), createAbout);
+router.put('/about', protect, authorize('admin'), upload.single('bgImage'), updateAbout);
+router.get('/about', protect, authorize('admin'), getAbout);
+router.delete('/about', protect, authorize('admin'), deleteAbout);
 
-// ==================== CARDS CRUD ====================
-router.post('/cards', upload.single('image'), addCard);
-router.get('/cards', getAllCards);
-router.get('/cards/:index', getCardById);
-router.put('/cards/:index', upload.single('image'), updateCard);
-router.delete('/cards/:index', deleteCard);
+// ==================== CARDS (ADMIN) ====================
+router.post('/cards', protect, authorize('admin'), upload.single('image'), addCard);
+router.get('/cards', protect, authorize('admin'), getAllCards);
+router.delete('/cards/:index', protect, authorize('admin'), deleteCard);
 
-// ==================== CORE VALUES CRUD ====================
-router.post('/core-values', createCoreValues);
-router.put('/core-values', updateCoreValues);
-router.get('/core-values', getCoreValues);
-router.post('/core-values/add', addCoreValue);
-router.get('/core-values/:index', getCoreValueById);
-router.put('/core-values/:index', updateCoreValue);
-router.delete('/core-values/:index', deleteCoreValue);
-router.delete('/core-values', deleteCoreValues);
+// ==================== CORE VALUES (ADMIN) ====================
+router.post('/core-values', protect, authorize('admin'), addCoreValue);
+router.delete('/core-values/:index', protect, authorize('admin'), deleteCoreValue);
 
-// ==================== WHY CHOOSE US CRUD ====================
-router.post('/why-choose-us', upload.single('image'), createWhyChooseUs);
-router.put('/why-choose-us', upload.single('image'), updateWhyChooseUs);
-router.get('/why-choose-us', getWhyChooseUs);
-router.post('/why-choose-us/points', addWhyChoosePoint);
-router.get('/why-choose-us/points/:index', getWhyChoosePointById);
-router.put('/why-choose-us/points/:index', updateWhyChoosePoint);
-router.delete('/why-choose-us/points/:index', deleteWhyChoosePoint);
-router.delete('/why-choose-us', deleteWhyChooseUs);
+// ==================== WHY CHOOSE US (ADMIN) ====================
+router.post('/why-choose-us/points', protect, authorize('admin'), addWhyChoosePoint);
+router.delete('/why-choose-us/points/:index', protect, authorize('admin'), deleteWhyChoosePoint);
 
-// ==================== CTA CRUD ====================
-router.post('/cta', createCta);
-router.put('/cta', updateCta);
-router.get('/cta', getCta);
-router.delete('/cta', deleteCta);
+// ==================== CTA (ADMIN) ====================
+router.post('/cta', protect, authorize('admin'), createCta);
+router.put('/cta', protect, authorize('admin'), updateCta);
+router.get('/cta', protect, authorize('admin'), getCta);
+router.delete('/cta', protect, authorize('admin'), deleteCta);
 
 export default router;

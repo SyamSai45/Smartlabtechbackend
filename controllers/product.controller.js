@@ -3,492 +3,264 @@ import Brand from '../models/Brand.js';
 import Category from '../models/Category.js';
 import Suggestion from '../models/Suggestion.js';
 import fs from 'fs';
-import {
-  processMainImage,
-  processGalleryImage
-} from '../config/sharp.config.js';
+import { processMainImage, processGalleryImage } from '../config/sharp.config.js';
 
-// Helper function to delete product images
+// Helper: Delete product images
 const deleteProductImages = async (product) => {
-  if (product.mainImage && fs.existsSync(product.mainImage)) {
-    fs.unlinkSync(product.mainImage);
-  }
-  if (product.gallery && product.gallery.length) {
-    for (const image of product.gallery) {
-      if (fs.existsSync(image)) fs.unlinkSync(image);
-    }
-  }
+  const images = [product.mainImage, ...(product.gallery || [])];
+  images.forEach(img => { if (img && fs.existsSync(img)) fs.unlinkSync(img); });
 };
 
-// Helper function to parse JSON fields
+// Helper: Parse JSON fields
 const parseJSONFields = (body) => {
-  const jsonFields = ['specifications', 'features', 'applications', 'faqs', 'highlights', 'certifications'];
-  jsonFields.forEach(field => {
-    if (body[field]) {
-      try {
-        body[field] = JSON.parse(body[field]);
-      } catch (e) {
-        console.error(`Error parsing ${field}:`, e);
-      }
-    }
+  ['specifications', 'features', 'applications', 'faqs', 'highlights', 'certifications'].forEach(field => {
+    if (body[field]) try { body[field] = JSON.parse(body[field]); } catch(e) {}
   });
   return body;
 };
 
-// Helper function to convert relative paths to full URLs and add slug
+// Helper: Generate slug
+const generateSlug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// Helper: Add full URLs to product
 const addFullUrls = (product, baseUrl) => {
   const productObj = product.toObject();
   
-  // Convert mainImage
-  if (productObj.mainImage && !productObj.mainImage.startsWith('http')) {
+  if (productObj.mainImage && !productObj.mainImage.startsWith('http')) 
     productObj.mainImage = `${baseUrl}${productObj.mainImage}`;
-  }
   
-  // Convert gallery
-  if (productObj.gallery && productObj.gallery.length) {
+  if (productObj.gallery?.length) {
     productObj.gallery = productObj.gallery.map(img => 
       img && !img.startsWith('http') ? `${baseUrl}${img}` : img
     );
   }
   
-  // Convert brand logo if exists
-  if (productObj.brand && productObj.brand.logo && !productObj.brand.logo.startsWith('http')) {
+  if (productObj.brand?.logo && !productObj.brand.logo.startsWith('http')) 
     productObj.brand.logo = `${baseUrl}${productObj.brand.logo}`;
-  }
   
-  // Ensure slug is included
-  if (!productObj.slug && productObj.name) {
-    productObj.slug = productObj.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-  }
-  
-  // Remove duplicate URL fields if they exist
+  if (!productObj.slug && productObj.name) productObj.slug = generateSlug(productObj.name);
   delete productObj.mainImageUrl;
   delete productObj.galleryUrls;
   
   return productObj;
 };
 
-// @desc    Create product with image upload
-// @route   POST /api/products
+// Helper: Process images from request
+const processProductImages = async (files) => {
+  const result = {};
+  if (files?.mainImage?.[0]) 
+    result.mainImage = await processMainImage(files.mainImage[0].path);
+  if (files?.gallery?.length) {
+    result.gallery = await Promise.all(
+      files.gallery.map(file => processGalleryImage(file.path))
+    );
+  }
+  return result;
+};
+
+// Helper: Build product query from filters
+const buildProductQuery = (req) => {
+  const { search, brand, category, minPrice, maxPrice, inStock, isFeatured, minRating, q } = req.query;
+  const query = { isActive: true };
+  
+  if (search || q) {
+    const term = (search || q).trim();
+    query.$or = [
+      { name: { $regex: term, $options: 'i' } },
+      { shortDesc: { $regex: term, $options: 'i' } },
+      { fullDesc: { $regex: term, $options: 'i' } },
+      { categoryName: { $regex: term, $options: 'i' } },
+      { brandName: { $regex: term, $options: 'i' } }
+    ];
+  }
+  
+  if (brand) query.brand = brand.match(/^[0-9a-fA-F]{24}$/) ? brand : { brandName: { $regex: brand, $options: 'i' } };
+  if (category) query.category = category.match(/^[0-9a-fA-F]{24}$/) ? category : { categoryName: { $regex: category, $options: 'i' } };
+  if (inStock === 'true') query.inStock = true;
+  if (isFeatured === 'true') query.isFeatured = true;
+  if (minRating) query.rating = { $gte: parseFloat(minRating) };
+  if (minPrice || maxPrice) query.price = { ...(minPrice && { $gte: parseFloat(minPrice) }), ...(maxPrice && { $lte: parseFloat(maxPrice) }) };
+  
+  return query;
+};
+
+// ==================== PRODUCT CRUD ====================
+
 export const createProduct = async (req, res) => {
   try {
-    // Parse JSON fields
     req.body = parseJSONFields(req.body);
-    
     const { name, brand, category } = req.body;
-
-    // Validate required fields
-    if (!name) {
-      return res.status(400).json({ success: false, message: 'Product name is required' });
+    
+    if (!name || !brand || !category) {
+      const missing = !name ? 'name' : !brand ? 'brand' : 'category';
+      return res.status(400).json({ success: false, message: `${missing} is required` });
     }
-    if (!brand) {
-      return res.status(400).json({ success: false, message: 'Brand ID is required' });
-    }
-    if (!category) {
-      return res.status(400).json({ success: false, message: 'Category ID is required' });
-    }
-
-    // Generate slug from name
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-
-    // Check if product exists by name or slug
-    const existingProduct = await Product.findOne({ $or: [{ name }, { slug }] });
-    if (existingProduct) {
+    
+    const slug = generateSlug(name);
+    if (await Product.findOne({ $or: [{ name }, { slug }] })) {
       return res.status(400).json({ success: false, message: 'Product with this name already exists' });
     }
-
-    // Verify brand exists
-    const brandExists = await Brand.findById(brand);
-    if (!brandExists) {
-      return res.status(400).json({ success: false, message: 'Brand not found' });
-    }
-
-    // Verify category exists
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
-      return res.status(400).json({ success: false, message: 'Category not found' });
-    }
-
-    // Process images - store relative paths in DB
-    if (req.files) {
-      // Process main image
-      if (req.files.mainImage && req.files.mainImage[0]) {
-        const originalPath = req.files.mainImage[0].path;
-        const relativePath = await processMainImage(originalPath);
-        req.body.mainImage = relativePath;
-      }
-
-      // Process gallery images
-      if (req.files.gallery && req.files.gallery.length) {
-        const galleryPaths = [];
-        
-        for (const file of req.files.gallery) {
-          const originalPath = file.path;
-          const relativePath = await processGalleryImage(originalPath);
-          galleryPaths.push(relativePath);
-        }
-        
-        req.body.gallery = galleryPaths;
-      }
-    }
-
-    // Create product with slug
+    
+    const [brandExists, categoryExists] = await Promise.all([
+      Brand.findById(brand), Category.findById(category)
+    ]);
+    if (!brandExists) return res.status(400).json({ success: false, message: 'Brand not found' });
+    if (!categoryExists) return res.status(400).json({ success: false, message: 'Category not found' });
+    
+    const images = await processProductImages(req.files);
     const product = await Product.create({
-      ...req.body,
-      slug,
-      brandName: brandExists.name,
-      categoryName: categoryExists.name
+      ...req.body, slug, ...images,
+      brandName: brandExists.name, categoryName: categoryExists.name
     });
-
+    
     await product.populate('brand category');
-
-    // Convert relative paths to full URLs for response
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const responseData = addFullUrls(product, baseUrl);
-
-    res.status(201).json({ 
-      success: true, 
-      message: 'Product created successfully', 
-      data: responseData 
-    });
+    res.status(201).json({ success: true, message: 'Product created successfully', data: addFullUrls(product, baseUrl) });
   } catch (error) {
-    console.error('❌ Create product error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get all products
-// @route   GET /api/products
 export const getAllProducts = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      search,
-      brand,
-      category,
-      minPrice,
-      maxPrice,
-      inStock,
-      isFeatured,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    const query = {};
-
-    if (search) {
-      query.$text = { $search: search };
-    }
-    if (brand) query.brand = brand;
-    if (category) query.category = category;
-    if (inStock === 'true') query.inStock = true;
-    if (isFeatured === 'true') query.isFeatured = true;
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = parseFloat(minPrice);
-      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
-    }
-
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const query = buildProductQuery(req);
     const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
     const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const products = await Product.find(query)
-      .populate('brand', 'name logo description website')
-      .populate('category', 'name')
-      .sort(sort)
-      .limit(parseInt(limit))
-      .skip(skip);
-
-    const total = await Product.countDocuments(query);
-
-    // Convert relative paths to full URLs
+    
+    const [products, total] = await Promise.all([
+      Product.find(query).populate('brand category').sort(sort).limit(parseInt(limit)).skip(skip),
+      Product.countDocuments(query)
+    ]);
+    
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
-
     res.json({
       success: true,
-      data: productsWithUrls,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      data: products.map(p => addFullUrls(p, baseUrl)),
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / parseInt(limit)) }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get product by ID (includes slug)
-// @route   GET /api/products/:id
 export const getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
-      .populate('brand', 'name logo description website')
-      .populate('category', 'name');
-
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-
+    const product = await Product.findById(req.params.id).populate('brand category');
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const responseData = addFullUrls(product, baseUrl);
-
-    res.json({ success: true, data: responseData });
+    res.json({ success: true, data: addFullUrls(product, baseUrl) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get product by slug (URL-friendly name)
-// @route   GET /api/products/slug/:slug
-// @route   GET /api/products/:slug
 export const getProductBySlug = async (req, res) => {
   try {
-    // Get slug from either route parameter
-    const slug = req.params.slug || req.params.id; // Fallback to :id if :slug is not defined
-    
-    console.log(`📍 Fetching product with slug: "${slug}"`);
-    
-    // Validate slug exists
-    if (!slug) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Slug parameter is required' 
-      });
-    }
-    
-    // Find product by slug (case-insensitive)
-    const product = await Product.findOne({ 
-      slug: { $regex: new RegExp(`^${slug}$`, 'i') } 
-    })
-    .populate('brand', 'name logo description website')
-    .populate('category', 'name');
-
-    console.log(`🔍 Product found: ${product ? product.name : 'No product found'}`);
-
-    if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: `Product not found with slug: "${slug}"` 
-      });
-    }
-
-    // Convert relative paths to full URLs
+    const slug = req.params.slug || req.params.id;
+    const product = await Product.findOne({ slug: { $regex: new RegExp(`^${slug}$`, 'i') } }).populate('brand category');
+    if (!product) return res.status(404).json({ success: false, message: `Product not found with slug: "${slug}"` });
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const responseData = addFullUrls(product, baseUrl);
-
-    res.json({ 
-      success: true, 
-      data: responseData 
-    });
+    res.json({ success: true, data: addFullUrls(product, baseUrl) });
   } catch (error) {
-    console.error('Error in getProductBySlug:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-// @desc    Get product by name (search by exact name or partial match)
-// @route   GET /api/products/name/:name
+
 export const getProductByName = async (req, res) => {
-  try {
+  try{
     const { name } = req.params;
     const { exact = 'false' } = req.query;
-
-    let query = {};
-
-    if (exact === 'true') {
-      query = { name: name };
-    } else {
-      query = { name: { $regex: name, $options: 'i' } };
-    }
-
-    const products = await Product.find(query)
-      .populate('brand', 'name logo description website')
-      .populate('category', 'name')
-      .sort({ name: 1 });
-
-    if (products.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: `No products found with name containing "${name}"` 
-      });
-    }
-
+    const query = exact === 'true' ? { name } : { name: { $regex: name, $options: 'i' } };
+    const products = await Product.find(query).populate('brand category').sort({ name: 1 });
+    if (!products.length) return res.status(404).json({ success: false, message: `No products found with name containing "${name}"` });
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
-
-    res.json({ 
-      success: true, 
-      count: productsWithUrls.length,
-      data: productsWithUrls 
-    });
+    res.json({ success: true, count: products.length, data: products.map(p => addFullUrls(p, baseUrl)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get featured products (includes slug)
-// @route   GET /api/products/featured
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const { limit = 8 } = req.query;
-    const products = await Product.find({ isFeatured: true, isActive: true })
-      .populate('brand', 'name logo')
-      .limit(parseInt(limit))
-      .sort({ rating: -1 });
-
+    const products = await Product.find({ isFeatured: true, isActive: true }).populate('brand', 'name logo').limit(parseInt(req.query.limit || 8)).sort({ rating: -1 });
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
-
-    res.json({ success: true, data: productsWithUrls });
+    res.json({ success: true, data: products.map(p => addFullUrls(p, baseUrl)) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get products by brand (includes slug)
-// @route   GET /api/products/brand/:brandId
 export const getProductsByBrand = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
-    const products = await Product.find({ brand: req.params.brandId, isActive: true })
-      .populate('brand', 'name logo')
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-
-    const total = await Product.countDocuments({ brand: req.params.brandId, isActive: true });
-
+    const [products, total] = await Promise.all([
+      Product.find({ brand: req.params.brandId, isActive: true }).populate('brand', 'name logo').limit(parseInt(limit)).skip((parseInt(page) - 1) * parseInt(limit)),
+      Product.countDocuments({ brand: req.params.brandId, isActive: true })
+    ]);
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
-
-    res.json({
-      success: true,
-      data: productsWithUrls,
-      pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) }
-    });
+    res.json({ success: true, data: products.map(p => addFullUrls(p, baseUrl)), pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get products by category (includes slug)
-// @route   GET /api/products/category/:categoryId
 export const getProductsByCategory = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
-    const products = await Product.find({ category: req.params.categoryId, isActive: true })
-      .populate('category', 'name')
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-
-    const total = await Product.countDocuments({ category: req.params.categoryId, isActive: true });
-
+    const [products, total] = await Promise.all([
+      Product.find({ category: req.params.categoryId, isActive: true }).populate('category', 'name').limit(parseInt(limit)).skip((parseInt(page) - 1) * parseInt(limit)),
+      Product.countDocuments({ category: req.params.categoryId, isActive: true })
+    ]);
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productsWithUrls = products.map(product => addFullUrls(product, baseUrl));
-
-    res.json({
-      success: true,
-      data: productsWithUrls,
-      pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) }
-    });
+    res.json({ success: true, data: products.map(p => addFullUrls(p, baseUrl)), pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Update product
-// @route   PUT /api/products/:id
 export const updateProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    
     req.body = parseJSONFields(req.body);
-
-    // Update slug if name changed
+    
     if (req.body.name && req.body.name !== product.name) {
-      req.body.slug = req.body.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-      
-      // Check if new slug already exists
-      const existingProduct = await Product.findOne({ 
-        slug: req.body.slug, 
-        _id: { $ne: req.params.id } 
-      });
-      if (existingProduct) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Product with similar name already exists' 
-        });
+      req.body.slug = generateSlug(req.body.name);
+      if (await Product.findOne({ slug: req.body.slug, _id: { $ne: req.params.id } })) {
+        return res.status(400).json({ success: false, message: 'Product with similar name already exists' });
       }
     }
-
+    
     if (req.files) {
       await deleteProductImages(product);
-
-      if (req.files.mainImage && req.files.mainImage[0]) {
-        const mainImagePath = req.files.mainImage[0].path;
-        const relativePath = await processMainImage(mainImagePath);
-        req.body.mainImage = relativePath;
-      }
-
-      if (req.files.gallery && req.files.gallery.length) {
-        const galleryPaths = [];
-        for (const file of req.files.gallery) {
-          const relativePath = await processGalleryImage(file.path);
-          galleryPaths.push(relativePath);
-        }
-        req.body.gallery = galleryPaths;
-      }
+      const images = await processProductImages(req.files);
+      Object.assign(req.body, images);
     }
-
+    
     if (req.body.brand && req.body.brand !== product.brand.toString()) {
       const brand = await Brand.findById(req.body.brand);
       if (brand) req.body.brandName = brand.name;
     }
-
+    
     if (req.body.category && req.body.category !== product.category.toString()) {
       const category = await Category.findById(req.body.category);
       if (category) req.body.categoryName = category.name;
     }
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('brand', 'name logo')
-     .populate('category', 'name');
-
+    
+    const updatedProduct = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('brand category');
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const responseData = addFullUrls(updatedProduct, baseUrl);
-
-    res.json({ success: true, message: 'Product updated successfully', data: responseData });
+    res.json({ success: true, message: 'Product updated successfully', data: addFullUrls(updatedProduct, baseUrl) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Delete product
-// @route   DELETE /api/products/:id
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
     await deleteProductImages(product);
     await product.deleteOne();
     res.json({ success: true, message: 'Product deleted successfully' });
@@ -497,459 +269,162 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-
-// @desc    Toggle product active status
-// @route   PATCH /api/products/:id/toggle
 export const toggleProductStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    // Find product by ID
-    const product = await Product.findById(id);
-    
-    if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Product not found' 
-      });
-    }
-    
-    // Toggle the isActive status
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
     product.isActive = !product.isActive;
-    
-    // Save the updated product
     await product.save();
-    
-    // Populate brand and category for response
-    await product.populate('brand', 'name logo');
-    await product.populate('category', 'name');
-    
-    // Convert relative paths to full URLs
+    await product.populate('brand category');
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const responseData = addFullUrls(product, baseUrl);
-    
-    const statusMessage = product.isActive ? 'activated' : 'deactivated';
-    
-    res.json({ 
-      success: true, 
-      message: `Product ${statusMessage} successfully`,
-      data: responseData
-    });
+    res.json({ success: true, message: `Product ${product.isActive ? 'activated' : 'deactivated'} successfully`, data: addFullUrls(product, baseUrl) });
   } catch (error) {
-    console.error('Toggle product status error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-
-// @desc    Advanced search products with filters
-// @route   GET /api/products/search
 export const searchProducts = async (req, res) => {
   try {
     const startTime = Date.now();
+    const { sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 20 } = req.query;
+    const query = buildProductQuery(req);
+    const sort = sortBy === 'price' ? { discountedPrice: sortOrder === 'desc' ? -1 : 1 } : { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
     
-    const {
-      q,
-      category,
-      brand,
-      minPrice,
-      maxPrice,
-      inStock,
-      isFeatured,
-      minRating,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-      page = 1,
-      limit = 20
-    } = req.query;
-
-    const query = { isActive: true };
-
-    // Text search on available fields
-    if (q && q.trim() !== '') {
-      const searchTerm = q.trim();
-      const searchRegex = { $regex: searchTerm, $options: 'i' };
-      
-      // Build $or array - only for string fields that exist in your schema
-      const orConditions = [
-        { name: searchRegex },
-        { shortDesc: searchRegex },
-        { fullDesc: searchRegex },
-        { categoryName: searchRegex },
-        { brandName: searchRegex },
-        { 'specifications.readability': searchRegex },
-        { 'specifications.capacity': searchRegex },
-        { 'specifications.panSize': searchRegex },
-        { 'specifications.display': searchRegex }
-      ];
-      
-      query.$or = orConditions;
-    }
-
-    // Apply filters
-    if (category) {
-      // Check if category is ObjectId or string
-      if (category.match(/^[0-9a-fA-F]{24}$/)) {
-        query.category = category;
-      } else {
-        query.categoryName = { $regex: category, $options: 'i' };
-      }
-    }
-    
-    if (brand) {
-      // Check if brand is ObjectId or string
-      if (brand.match(/^[0-9a-fA-F]{24}$/)) {
-        query.brand = brand;
-      } else {
-        query.brandName = { $regex: brand, $options: 'i' };
-      }
-    }
-    
-    if (inStock === 'true') query.inStock = true;
-    if (isFeatured === 'true') query.isFeatured = true;
-    
-    // Price range
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = parseFloat(minPrice);
-      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
-    }
-    
-    // Rating filter
-    if (minRating) {
-      query.rating = { $gte: parseFloat(minRating) };
-    }
-
-    // Sorting
-    const sort = {};
-    if (sortBy === 'price') {
-      sort.discountedPrice = sortOrder === 'desc' ? -1 : 1;
-    } else if (sortBy === 'rating') {
-      sort.rating = sortOrder === 'desc' ? -1 : 1;
-    } else if (sortBy === 'name') {
-      sort.name = sortOrder === 'desc' ? -1 : 1;
-    } else {
-      sort.createdAt = sortOrder === 'desc' ? -1 : 1;
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Execute search
     const [products, total] = await Promise.all([
-      Product.find(query)
-        .populate('brand', 'name logo description website')
-        .populate('category', 'name')
-        .sort(sort)
-        .limit(parseInt(limit))
-        .skip(skip),
+      Product.find(query).populate('brand category').sort(sort).limit(parseInt(limit)).skip((parseInt(page) - 1) * parseInt(limit)),
       Product.countDocuments(query)
     ]);
-
-    const responseTime = Date.now() - startTime;
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     
-    // Add full URLs to products
-    const productsWithUrls = products.map(product => {
-      const productObj = product.toObject();
-      if (productObj.mainImage && !productObj.mainImage.startsWith('http')) {
-        productObj.mainImage = `${baseUrl}${productObj.mainImage}`;
-      }
-      if (productObj.gallery && productObj.gallery.length) {
-        productObj.gallery = productObj.gallery.map(img => 
-          img && !img.startsWith('http') ? `${baseUrl}${img}` : img
-        );
-      }
-      if (productObj.brand?.logo && !productObj.brand.logo.startsWith('http')) {
-        productObj.brand.logo = `${baseUrl}${productObj.brand.logo}`;
-      }
-      return productObj;
-    });
-
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({
       success: true,
-      count: productsWithUrls.length,
-      data: productsWithUrls,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit))
-      },
-      meta: {
-        query: q || null,
-        responseTime: `${responseTime}ms`,
-        totalResults: total
-      }
-    });
-  } catch (error) {
-    console.error('Search error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ==================== PRODUCT SUGGESTIONS CRUD ====================
-
-// @desc    Get all product suggestions (Public)
-// @route   GET /api/products/suggestions
-export const getProductSuggestions = async (req, res) => {
-  try {
-    const { limit = 20 } = req.query;
-    
-    const suggestions = await Suggestion.find({ isActive: true })
-      .populate({
-        path: 'productId',
-        populate: { path: 'brand', select: 'name logo' }
-      })
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit));
-    
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    
-    const formattedSuggestions = {
-      products: suggestions.map(suggestion => {
-        const product = suggestion.productId;
-        if (!product) return null;
-        
-        return {
-          type: 'product',
-          id: product._id,
-          name: product.name,
-          slug: product.slug,
-          brandName: product.brandName,
-          categoryName: product.categoryName,
-          image: product.mainImage ? `${baseUrl}${product.mainImage}` : null,
-          price: product.discountedPrice || product.price,
-          brand: product.brand ? {
-            id: product.brand._id,
-            name: product.brand.name,
-            logo: product.brand.logo ? `${baseUrl}${product.brand.logo}` : null
-          } : null
-        };
-      }).filter(Boolean),
-      categories: [],
-      brands: []
-    };
-    
-    res.json({ success: true, data: formattedSuggestions });
-  } catch (error) {
-    console.error('Get suggestions error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Add product to suggestions (Admin)
-// @route   POST /api/products/suggestions
-export const addProductSuggestion = async (req, res) => {
-  try {
-    const { productId } = req.body;
-    
-    if (!productId) {
-      return res.status(400).json({ success: false, message: 'Product ID is required' });
-    }
-    
-    // Check if product exists
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    
-    // Check if already in suggestions
-    const existingSuggestion = await Suggestion.findOne({ productId });
-    if (existingSuggestion) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Product already in suggestions' 
-      });
-    }
-    
-    // Create suggestion
-    await Suggestion.create({
-      productId,
-      isActive: true
-    });
-    
-    // Get the created suggestion with populated product
-    const newSuggestion = await Suggestion.findOne({ productId })
-      .populate({
-        path: 'productId',
-        populate: { path: 'brand', select: 'name logo' }
-      });
-    
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const productData = newSuggestion.productId;
-    
-    const formattedSuggestion = {
-      type: 'product',
-      id: productData._id,
-      name: productData.name,
-      slug: productData.slug,
-      brandName: productData.brandName,
-      categoryName: productData.categoryName,
-      image: productData.mainImage ? `${baseUrl}${productData.mainImage}` : null,
-      price: productData.discountedPrice || productData.price,
-      isActive: newSuggestion.isActive,
-      brand: productData.brand ? {
-        id: productData.brand._id,
-        name: productData.brand.name,
-        logo: productData.brand.logo ? `${baseUrl}${productData.brand.logo}` : null
-      } : null
-    };
-    
-    res.status(201).json({ 
-      success: true, 
-      message: 'Product added to suggestions successfully', 
-      data: formattedSuggestion 
-    });
-  } catch (error) {
-    console.error('Add suggestion error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Remove product from suggestions
-// @route   DELETE /api/products/suggestions/:productId
-export const removeProductSuggestion = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    
-    const suggestion = await Suggestion.findOneAndDelete({ productId });
-    
-    if (!suggestion) {
-      return res.status(404).json({ success: false, message: 'Suggestion not found' });
-    }
-    
-    res.json({ success: true, message: 'Product removed from suggestions successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Toggle suggestion active status
-// @route   PATCH /api/products/suggestions/:productId/toggle
-export const toggleSuggestionStatus = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    
-    const suggestion = await Suggestion.findOne({ productId });
-    if (!suggestion) {
-      return res.status(404).json({ success: false, message: 'Suggestion not found' });
-    }
-    
-    suggestion.isActive = !suggestion.isActive;
-    await suggestion.save();
-    
-    res.json({ 
-      success: true, 
-      message: `Suggestion ${suggestion.isActive ? 'activated' : 'deactivated'} successfully`,
-      data: { productId, isActive: suggestion.isActive }
+      count: products.length,
+      data: products.map(p => addFullUrls(p, baseUrl)),
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / parseInt(limit)) },
+      meta: { query: req.query.q || req.query.search || null, responseTime: `${Date.now() - startTime}ms`, totalResults: total }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Bulk add products to suggestions
-// @route   POST /api/products/suggestions/bulk
-export const bulkAddProductSuggestions = async (req, res) => {
-  try {
-    const { productIds } = req.body;
-    
-    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-      return res.status(400).json({ success: false, message: 'Product IDs array is required' });
-    }
-    
-    const results = {
-      added: [],
-      skipped: [],
-      notFound: []
-    };
-    
-    for (const productId of productIds) {
-      // Check if already exists
-      const existing = await Suggestion.findOne({ productId });
-      if (existing) {
-        results.skipped.push(productId);
-        continue;
-      }
-      
-      // Check if product exists
-      const product = await Product.findById(productId);
-      if (!product) {
-        results.notFound.push(productId);
-        continue;
-      }
-      
-      // Create suggestion
-      await Suggestion.create({
-        productId,
-        isActive: true
-      });
-      
-      results.added.push(productId);
-    }
-    
-    res.json({ 
-      success: true, 
-      message: `${results.added.length} products added, ${results.skipped.length} skipped, ${results.notFound.length} not found`,
-      data: results
-    });
-  } catch (error) {
-    console.error('Bulk add suggestions error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// @desc    Get filter options (categories, brands, price range)
-// @route   GET /api/products/search/filters
 export const getSearchFilters = async (req, res) => {
   try {
     const { q } = req.query;
-    
     let baseQuery = { isActive: true };
+    if (q?.trim()) baseQuery.$or = [
+      { name: { $regex: q, $options: 'i' } },
+      { categoryName: { $regex: q, $options: 'i' } },
+      { brandName: { $regex: q, $options: 'i' } }
+    ];
     
-    if (q && q.trim() !== '') {
-      baseQuery.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { categoryName: { $regex: q, $options: 'i' } },
-        { brandName: { $regex: q, $options: 'i' } }
-      ];
-    }
-    
-    // Get unique categories
-    const categories = await Product.distinct('categoryName', baseQuery);
-    
-    // Get unique brands
-    const brands = await Product.aggregate([
-      { $match: baseQuery },
-      { $group: { _id: { id: '$brand', name: '$brandName' } } },
-      { $project: { _id: 0, id: '$_id.id', name: '$_id.name' } }
-    ]);
-    
-    // Get price range
-    const priceStats = await Product.aggregate([
-      { $match: baseQuery },
-      {
-        $group: {
-          _id: null,
-          minPrice: { $min: '$price' },
-          maxPrice: { $max: '$price' }
-        }
-      }
+    const [categories, brands, priceStats] = await Promise.all([
+      Product.distinct('categoryName', baseQuery),
+      Product.aggregate([{ $match: baseQuery }, { $group: { _id: { id: '$brand', name: '$brandName' } } }, { $project: { _id: 0, id: '$_id.id', name: '$_id.name' } }]),
+      Product.aggregate([{ $match: baseQuery }, { $group: { _id: null, minPrice: { $min: '$price' }, maxPrice: { $max: '$price' } } }])
     ]);
     
     res.json({
       success: true,
       data: {
         categories: categories.filter(c => c).sort(),
-        brands: brands.filter(b => b && b.name).sort((a, b) => a.name.localeCompare(b.name)),
+        brands: brands.filter(b => b?.name).sort((a, b) => a.name.localeCompare(b.name)),
         priceRange: priceStats[0] || { minPrice: 0, maxPrice: 0 }
       }
     });
   } catch (error) {
-    console.error('Search filters error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== PRODUCT SUGGESTIONS ====================
+
+export const getProductSuggestions = async (req, res) => {
+  try {
+    const suggestions = await Suggestion.find({ isActive: true }).populate({ path: 'productId', populate: { path: 'brand', select: 'name logo' } }).limit(parseInt(req.query.limit || 20));
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({
+      success: true,
+      data: {
+        products: suggestions.map(s => {
+          const p = s.productId;
+          if (!p) return null;
+          return {
+            type: 'product', id: p._id, name: p.name, slug: p.slug,
+            brandName: p.brandName, categoryName: p.categoryName,
+            image: p.mainImage ? `${baseUrl}${p.mainImage}` : null,
+            price: p.discountedPrice || p.price,
+            brand: p.brand ? { id: p.brand._id, name: p.brand.name, logo: p.brand.logo ? `${baseUrl}${p.brand.logo}` : null } : null
+          };
+        }).filter(Boolean),
+        categories: [], brands: []
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const addProductSuggestion = async (req, res) => {
+  try {
+    const { productId } = req.body;
+    if (!productId) return res.status(400).json({ success: false, message: 'Product ID is required' });
+    
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    if (await Suggestion.findOne({ productId })) return res.status(400).json({ success: false, message: 'Product already in suggestions' });
+    
+    await Suggestion.create({ productId, isActive: true });
+    const newSuggestion = await Suggestion.findOne({ productId }).populate({ path: 'productId', populate: { path: 'brand', select: 'name logo' } });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const p = newSuggestion.productId;
+    
+    res.status(201).json({
+      success: true, message: 'Product added to suggestions successfully',
+      data: { type: 'product', id: p._id, name: p.name, slug: p.slug, brandName: p.brandName, categoryName: p.categoryName, image: p.mainImage ? `${baseUrl}${p.mainImage}` : null, price: p.discountedPrice || p.price, isActive: newSuggestion.isActive, brand: p.brand ? { id: p.brand._id, name: p.brand.name, logo: p.brand.logo ? `${baseUrl}${p.brand.logo}` : null } : null }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const removeProductSuggestion = async (req, res) => {
+  try {
+    const suggestion = await Suggestion.findOneAndDelete({ productId: req.params.productId });
+    if (!suggestion) return res.status(404).json({ success: false, message: 'Suggestion not found' });
+    res.json({ success: true, message: 'Product removed from suggestions successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const toggleSuggestionStatus = async (req, res) => {
+  try {
+    const suggestion = await Suggestion.findOne({ productId: req.params.productId });
+    if (!suggestion) return res.status(404).json({ success: false, message: 'Suggestion not found' });
+    suggestion.isActive = !suggestion.isActive;
+    await suggestion.save();
+    res.json({ success: true, message: `Suggestion ${suggestion.isActive ? 'activated' : 'deactivated'} successfully`, data: { productId: req.params.productId, isActive: suggestion.isActive } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const bulkAddProductSuggestions = async (req, res) => {
+  try {
+    const { productIds } = req.body;
+    if (!productIds?.length) return res.status(400).json({ success: false, message: 'Product IDs array is required' });
+    
+    const results = { added: [], skipped: [], notFound: [] };
+    for (const productId of productIds) {
+      if (await Suggestion.findOne({ productId })) results.skipped.push(productId);
+      else if (await Product.findById(productId)) {
+        await Suggestion.create({ productId, isActive: true });
+        results.added.push(productId);
+      } else results.notFound.push(productId);
+    }
+    res.json({ success: true, message: `${results.added.length} added, ${results.skipped.length} skipped, ${results.notFound.length} not found`, data: results });
+  } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };

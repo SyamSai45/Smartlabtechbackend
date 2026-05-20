@@ -13,8 +13,8 @@ const router = express.Router();
 router.get('/', getContactInfo);
 
 // Admin routes
-router.post('/',  createContactInfo);
-router.put('/',  updateContactInfo);
-router.delete('/', deleteContactInfo);
+router.post('/', protect, authorize('admin'),  createContactInfo);
+router.put('/', protect, authorize('admin'),  updateContactInfo);
+router.delete('/', protect, authorize('admin'), deleteContactInfo);
 
 export default router;
