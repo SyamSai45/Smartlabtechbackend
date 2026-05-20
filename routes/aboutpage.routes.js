@@ -48,18 +48,18 @@ router.delete('/', protect, authorize('admin'), deleteAboutPage);
 // ==================== HERO (ADMIN) ====================
 router.post('/hero', protect, authorize('admin'), upload.single('image'), createHero);
 router.put('/hero', protect, authorize('admin'), upload.single('image'), updateHero);
-router.get('/hero', protect, authorize('admin'), getHero);
+router.get('/hero', getHero);
 router.delete('/hero', protect, authorize('admin'), deleteHero);
 
 // ==================== ABOUT SECTION (ADMIN) ====================
 router.post('/about', protect, authorize('admin'), upload.single('bgImage'), createAbout);
 router.put('/about', protect, authorize('admin'), upload.single('bgImage'), updateAbout);
-router.get('/about', protect, authorize('admin'), getAbout);
+router.get('/about', getAbout);
 router.delete('/about', protect, authorize('admin'), deleteAbout);
 
 // ==================== CARDS (ADMIN) ====================
 router.post('/cards', protect, authorize('admin'), upload.single('image'), addCard);
-router.get('/cards', protect, authorize('admin'), getAllCards);
+router.get('/cards', getAllCards);
 router.delete('/cards/:index', protect, authorize('admin'), deleteCard);
 
 // ==================== CORE VALUES (ADMIN) ====================
@@ -73,7 +73,7 @@ router.delete('/why-choose-us/points/:index', protect, authorize('admin'), delet
 // ==================== CTA (ADMIN) ====================
 router.post('/cta', protect, authorize('admin'), createCta);
 router.put('/cta', protect, authorize('admin'), updateCta);
-router.get('/cta', protect, authorize('admin'), getCta);
-router.delete('/cta', protect, authorize('admin'), deleteCta);
+router.get('/cta', getCta);
+router.delete('/cta', protect, authorize('admin'), deleteCta);  
 
 export default router;
