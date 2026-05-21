@@ -64,10 +64,12 @@ router.delete('/cards/:index', protect, authorize('admin'), deleteCard);
 
 // ==================== CORE VALUES (ADMIN) ====================
 router.post('/core-values', protect, authorize('admin'), addCoreValue);
+router.get('/core-values', getAboutPage);
 router.delete('/core-values/:index', protect, authorize('admin'), deleteCoreValue);
 
 // ==================== WHY CHOOSE US (ADMIN) ====================
 router.post('/why-choose-us/points', protect, authorize('admin'), addWhyChoosePoint);
+router.get('/why-choose-us/points',  getAboutPage);
 router.delete('/why-choose-us/points/:index', protect, authorize('admin'), deleteWhyChoosePoint);
 
 // ==================== CTA (ADMIN) ====================
