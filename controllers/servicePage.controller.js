@@ -339,15 +339,32 @@ export const updatePopup = async (req, res) => {
 export const getPopup = async (req, res) => {
   try {
     const page = await ServicesPage.findOne();
-    if (!page?.popup) return res.status(404).json({ success: false, message: 'Popup not found' });
+    
+    if (!page?.popup || !page.popup.image) {
+      return res.json({ 
+        success: true, 
+        data: {
+          image: null,
+          isActive: false,
+          _id: page?.popup?._id || null
+        }
+      });
+    }
+    
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const popupData = page.popup.toObject();
-    if (popupData.image && !popupData.image.startsWith('http')) popupData.image = `${baseUrl}${popupData.image}`;
+    
+    if (!popupData.image.startsWith('http')) {
+      popupData.image = `${baseUrl}${popupData.image}`;
+    }
+    
     res.json({ success: true, data: popupData });
+    
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 export const deletePopup = async (req, res) => {
   try {
