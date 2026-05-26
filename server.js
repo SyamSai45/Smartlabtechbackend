@@ -33,6 +33,12 @@ dns.setDefaultResultOrder("ipv4first");
 
 dotenv.config();
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://smartlabtechadmin.onrender.com'
+];
+
 // Create upload directories on server start
 const createUploadDirs = () => {
   const dirs = [
