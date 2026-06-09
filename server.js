@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { application } from 'express';
 import dns from 'dns';
 dns.setServers(['1.1.1.1', '8.8.8.8']);
 
@@ -21,6 +21,7 @@ import quoteRoutes from './routes/quote.routes.js';
 import blogPageRoutes from './routes/blogpage.routes.js';
 import footerRoutes from './routes/footer.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import ApplicationPageRoutes from './routes/Applicationpage.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import resourcePageRoutes from './routes/resourcepage.routes.js';
 import authRoutes from './routes/auth.routes.js';  // Add auth routes
@@ -151,6 +152,7 @@ app.use('/api/blogs', blogPageRoutes);
 app.use('/api/footer', footerRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/applicationpage', ApplicationPageRoutes);
 app.use('/api/resources', resourcePageRoutes);
 
 // Health check
