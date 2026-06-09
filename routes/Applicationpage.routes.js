@@ -1,6 +1,9 @@
 // routes/applicationPageRoutes.js
 import express from 'express';
 import {
+
+  getApplicationPage,
+
   // Hero
   createHero,
   getAllHero,
@@ -33,6 +36,8 @@ import {
 import { uploadHeroImage } from '../config/multer.config.js';
 
 const router = express.Router();
+
+router.get('/all', getApplicationPage);
 
 // ==================== HERO ROUTES (with image upload) ====================
 router.post('/hero', uploadHeroImage, createHero);

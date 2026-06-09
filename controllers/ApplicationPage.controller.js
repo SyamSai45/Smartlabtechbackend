@@ -18,6 +18,55 @@ const getImageUrl = (req, imagePath) => {
   return `${baseUrl}${imagePath}`;
 };
 
+
+// ==================== APPLICATION PAGE CONTROLLER ====================
+
+export const getApplicationPage = async (req, res) => {
+  try {
+    // Fetch all sections in parallel
+    const [heroes, mainCards, servicesList, ctaList] = await Promise.all([
+      Hero.find().sort({ createdAt: -1 }),
+      MainCard.find().sort({ createdAt: -1 }),
+      Services.find().sort({ createdAt: -1 }),
+      CTA.find().sort({ createdAt: -1 })
+    ]);
+
+    // Get the latest hero (with image URL)
+    const latestHero = heroes[0] || null;
+    let heroWithUrl = null;
+    if (latestHero) {
+      heroWithUrl = latestHero.toObject();
+      heroWithUrl.imageUrl = getImageUrl(req, latestHero.image);
+    }
+
+    // Get the latest services (with all its nested cards)
+    const latestServices = servicesList[0] || null;
+
+    // Get the latest CTA
+    const latestCTA = ctaList[0] || null;
+
+    // Build complete response
+    const applicationPage = {
+      hero: heroWithUrl,
+      mainCards: mainCards,
+      services: latestServices,
+      cta: latestCTA,
+      metadata: {
+        totalMainCards: mainCards.length,
+        totalServiceCards: latestServices?.cards?.length || 0,
+        lastUpdated: new Date().toISOString()
+      }
+    };
+
+    res.json({ 
+      success: true, 
+      data: applicationPage 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==================== HERO SECTION WITH IMAGE URL ====================
 
 export const createHero = async (req, res) => {
