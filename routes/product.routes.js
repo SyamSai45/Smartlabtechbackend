@@ -3,7 +3,7 @@ import {
   createProduct, getAllProducts, getProductById, getProductBySlug, getProductByName,
   getFeaturedProducts, getProductsByBrand, getProductsByCategory, updateProduct, deleteProduct,
   toggleProductStatus, searchProducts, getSearchFilters,
-  getProductSuggestions, addProductSuggestion, removeProductSuggestion, toggleSuggestionStatus, bulkAddProductSuggestions
+  getProductSuggestions, addProductSuggestion, removeProductSuggestion, toggleSuggestionStatus,getAllProductsAdmin, bulkAddProductSuggestions
 } from '../controllers/product.controller.js';
 import { uploadProductImages } from '../config/multer.config.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
@@ -12,6 +12,7 @@ const router = express.Router();
 
 // Public routes
 router.get('/', getAllProducts);
+router.get('/admin', getAllProductsAdmin);
 router.get('/search', searchProducts);
 router.get('/search/filters', getSearchFilters);
 router.get('/featured', getFeaturedProducts);

@@ -144,6 +144,70 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
+export const getAllProductsAdmin = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', includeInactive = 'true' } = req.query;
+    
+    // Build query - don't filter by isActive for admin
+    const query = {};
+    
+    // Optional: Still apply search/filters but without isActive restriction
+    const { search, brand, category, minPrice, maxPrice, inStock, isFeatured, minRating, q } = req.query;
+    
+    if (search || q) {
+      const term = (search || q).trim();
+      query.$or = [
+        { name: { $regex: term, $options: 'i' } },
+        { shortDesc: { $regex: term, $options: 'i' } },
+        { fullDesc: { $regex: term, $options: 'i' } },
+        { categoryName: { $regex: term, $options: 'i' } },
+        { brandName: { $regex: term, $options: 'i' } }
+      ];
+    }
+    
+    if (brand) query.brand = brand.match(/^[0-9a-fA-F]{24}$/) ? brand : { brandName: { $regex: brand, $options: 'i' } };
+    if (category) query.category = category.match(/^[0-9a-fA-F]{24}$/) ? category : { categoryName: { $regex: category, $options: 'i' } };
+    if (inStock === 'true') query.inStock = true;
+    if (isFeatured === 'true') query.isFeatured = true;
+    if (minRating) query.rating = { $gte: parseFloat(minRating) };
+    if (minPrice || maxPrice) query.price = { ...(minPrice && { $gte: parseFloat(minPrice) }), ...(maxPrice && { $lte: parseFloat(maxPrice) }) };
+    
+    // Optional: Filter by active status if specified
+    if (includeInactive === 'false') {
+      query.isActive = true;
+    }
+    
+    const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const [products, total, activeCount, inactiveCount] = await Promise.all([
+      Product.find(query).populate('brand category').sort(sort).limit(parseInt(limit)).skip(skip),
+      Product.countDocuments(query),
+      Product.countDocuments({ isActive: true }),
+      Product.countDocuments({ isActive: false })
+    ]);
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({
+      success: true,
+      data: products.map(p => addFullUrls(p, baseUrl)),
+      pagination: { 
+        total, 
+        page: parseInt(page), 
+        limit: parseInt(limit), 
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      summary: {
+        totalProducts: total,
+        activeProducts: activeCount,
+        inactiveProducts: inactiveCount
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id).populate('brand category');
