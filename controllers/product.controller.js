@@ -1,5 +1,6 @@
 import Product from '../models/Product.js';
 import Brand from '../models/Brand.js';
+import { Blog } from '../models/BlogsPage.js';
 import Category from '../models/Category.js';
 import Suggestion from '../models/Suggestion.js';
 import fs from 'fs';
@@ -366,6 +367,86 @@ export const searchProducts = async (req, res) => {
       data: products.map(p => addFullUrls(p, baseUrl)),
       pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / parseInt(limit)) },
       meta: { query: req.query.q || req.query.search || null, responseTime: `${Date.now() - startTime}ms`, totalResults: total }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const searchAllContent = async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Search query is required' 
+      });
+    }
+    
+    const searchTerm = q.trim();
+    const searchRegex = new RegExp(searchTerm, 'i');
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    // Search both collections in parallel
+    const [products, blogs] = await Promise.all([
+      Product.find({
+        isActive: true,
+        $or: [
+          { name: searchRegex },
+          { shortDesc: searchRegex },
+          { fullDesc: searchRegex },
+          { categoryName: searchRegex },
+          { brandName: searchRegex }
+        ]
+      }).limit(20),
+      
+      Blog.find({
+        isActive: true,
+        $or: [
+          { title: searchRegex },
+          { shortDescription: searchRegex },
+          { longDescription: searchRegex },
+          { category: searchRegex },
+          { tags: { $in: [searchRegex] } }
+        ]
+      }).limit(20)
+    ]);
+    
+    // Format products
+    const formattedProducts = products.map(p => ({
+      type: 'product',
+      id: p._id,
+      title: p.name,
+      description: p.shortDesc,
+      image: p.mainImage ? `${baseUrl}${p.mainImage}` : null,
+      slug: p.slug,
+      price: p.discountedPrice || p.price,
+      brand: p.brandName,
+      category: p.categoryName
+    }));
+    
+    // Format blogs
+    const formattedBlogs = blogs.map(b => ({
+      type: 'blog',
+      id: b._id,
+      title: b.title,
+      description: b.shortDescription,
+      image: b.mainImage ? `${baseUrl}${b.mainImage}` : null,
+      slug: b.slug,
+      category: b.category,
+      date: b.date,
+      author: b.author?.name
+    }));
+    
+    // Combine all results
+    const allResults = [...formattedProducts, ...formattedBlogs];
+    
+    res.json({
+      success: true,
+      query: searchTerm,
+      count: allResults.length,
+      data: allResults
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

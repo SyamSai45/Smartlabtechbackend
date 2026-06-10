@@ -2,7 +2,7 @@ import express from 'express';
 import {
   createProduct, getAllProducts, getProductById, getProductBySlug, getProductByName,
   getFeaturedProducts, getProductsByBrand, getProductsByCategory, updateProduct, deleteProduct,
-  toggleProductStatus, searchProducts, getSearchFilters,
+  toggleProductStatus, searchProducts, getSearchFilters, searchAllContent,
   getProductSuggestions, addProductSuggestion, removeProductSuggestion, toggleSuggestionStatus,getAllProductsAdmin, bulkAddProductSuggestions
 } from '../controllers/product.controller.js';
 import { uploadProductImages } from '../config/multer.config.js';
@@ -15,6 +15,7 @@ router.get('/', getAllProducts);
 router.get('/admin', getAllProductsAdmin);
 router.get('/search', searchProducts);
 router.get('/search/filters', getSearchFilters);
+router.get('/search/all', searchAllContent);
 router.get('/featured', getFeaturedProducts);
 router.get('/suggestions', getProductSuggestions);
 router.get('/slug/:slug', getProductBySlug);
